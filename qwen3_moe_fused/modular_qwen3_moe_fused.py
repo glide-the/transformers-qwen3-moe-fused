@@ -1,0 +1,121 @@
+# Modified from https://github.com/huggingface/transformers/blob/ccf2ca162e33f381e454cdb74bf4b41a51ab976d/src/transformers/models/qwen3_moe/modular_qwen3_moe.py
+
+from math import sqrt
+
+import torch
+import torch.nn.functional as F
+from torch import nn
+
+from transformers.activations import ACT2FN
+from transformers.models.qwen3_moe.modeling_qwen3_moe import (
+    Qwen3MoeDecoderLayer,
+    Qwen3MoeForCausalLM,
+    Qwen3MoeMLP,
+    Qwen3MoeModel,
+)
+
+from .configuration_qwen3_moe_fused import Qwen3MoeFusedConfig
+from .moe_fused_linear import moe_fused_linear
+
+
+class MoeFusedLinear(nn.Module):
+    __constants__ = ["in_features", "out_features", "num_experts"]
+    in_features: int
+    out_features: int
+    num_experts: int
+    weight: torch.Tensor
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        num_experts: int,
+        device=None,
+        dtype=None,
+    ) -> None:
+        factory_kwargs = {"device": device, "dtype": dtype}
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.num_experts = num_experts
+        self.weight = nn.Parameter(torch.empty((num_experts, out_features, in_features), **factory_kwargs))
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        # Kaiming uniform on in_features
+        # Although Qwen's default activation is silu, we set the gain `a = sqrt(5)` following the original Linear
+        bound = sqrt(3 * 5 / self.in_features)
+        nn.init.uniform_(self.weight, -bound, bound)
+
+    def forward(self, input: torch.Tensor, selected_experts: torch.Tensor) -> torch.Tensor:
+        return moe_fused_linear(input, self.weight, selected_experts)
+
+    def extra_repr(self) -> str:
+        return f"in_features={self.in_features}, out_features={self.out_features}, num_experts={self.num_experts}"
+
+
+class Qwen3MoeFusedSparseMoeBlock(nn.Module):
+    def __init__(self, config: Qwen3MoeFusedConfig) -> None:
+        super().__init__()
+        self.num_experts = config.num_experts
+        self.num_selected = config.num_experts_per_tok
+        self.norm_topk_prob = config.norm_topk_prob
+        self.hidden_size = config.hidden_size
+        self.moe_intermediate_size = config.moe_intermediate_size
+
+        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
+        self.gate_proj = MoeFusedLinear(self.hidden_size, self.moe_intermediate_size, config.num_experts)
+        self.up_proj = MoeFusedLinear(self.hidden_size, self.moe_intermediate_size, config.num_experts)
+        self.down_proj = MoeFusedLinear(self.moe_intermediate_size, self.hidden_size, config.num_experts)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        M = batch_size * sequence_length
+
+        hidden_states = hidden_states.view(M, hidden_dim)
+        # router_logits: (M, num_experts)
+        router_logits = self.gate(hidden_states)
+
+        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float32)
+        # routing_weights, selected_experts: (M, num_selected)
+        routing_weights, selected_experts = torch.topk(routing_weights, self.num_selected, dim=-1)
+        if self.norm_topk_prob:  # only diff with mixtral sparse moe block!
+            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        # we cast back to the input dtype
+        routing_weights = routing_weights.to(hidden_states.dtype)
+
+        hidden_states = hidden_states.unsqueeze(1).broadcast_to(M, self.num_selected, hidden_dim).contiguous()
+        # TODO: Fuse gate_proj and up_proj, or fuse gate_proj and silu
+        gate_h = self.act_fn(self.gate_proj(hidden_states, selected_experts))
+        up_h = self.up_proj(hidden_states, selected_experts)
+        hidden_states = self.down_proj(gate_h * up_h, selected_experts)
+        del gate_h, up_h
+
+        hidden_states = torch.einsum("beo,be->bo", hidden_states, routing_weights)
+        return hidden_states, router_logits
+
+
+class Qwen3MoeFusedDecoderLayer(Qwen3MoeDecoderLayer):
+    def __init__(self, config: Qwen3MoeFusedConfig, layer_idx: int) -> None:
+        super().__init__(config, layer_idx)
+        if (layer_idx not in config.mlp_only_layers) and (
+            config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
+        ):
+            self.mlp = Qwen3MoeFusedSparseMoeBlock(config)
+        else:
+            self.mlp = Qwen3MoeMLP(config, intermediate_size=config.intermediate_size)
+
+
+class Qwen3MoeFusedModel(Qwen3MoeModel):
+    def __init__(self, config: Qwen3MoeFusedConfig) -> None:
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [Qwen3MoeFusedDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+
+
+class Qwen3MoeFusedForCausalLM(Qwen3MoeForCausalLM):
+    def __init__(self, config: Qwen3MoeFusedConfig) -> None:
+        super().__init__(config)
+        self.model = Qwen3MoeFusedModel(config)
