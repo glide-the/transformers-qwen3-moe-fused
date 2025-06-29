@@ -1,19 +1,23 @@
 # Modified from https://github.com/bitsandbytes-foundation/bitsandbytes/blob/1abd5e781013a085f86586b30a248dc769909668/bitsandbytes/nn/modules.py#L377
+# TODO: support IPEX
 
 import warnings
 from typing import Any, Dict, Optional
 
 import torch
+from bitsandbytes.functional import dequantize_4bit
 from bitsandbytes.nn.modules import Params4bit, fix_4bit_weight_quant_state_from_module
 from torch import nn
 
+from ..functional import moe_fused_linear
 from ..modular_qwen3_moe_fused import MoeFusedLinear
 
 
+# TODO: Fuse this
 def moe_fused_linear_4bit(input: torch.Tensor, weight: Params4bit, selected_experts: torch.Tensor) -> torch.Tensor:
-    quant_state = weight.quant_state
-    # TODO
-    raise NotImplementedError
+    assert not weight.requires_grad
+    weight = dequantize_4bit(weight, weight.quant_state).to(input.dtype)
+    return moe_fused_linear(input, weight, selected_experts)
 
 
 class MoeFusedLinear4bit(MoeFusedLinear):

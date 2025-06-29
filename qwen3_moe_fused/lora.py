@@ -8,7 +8,6 @@ from peft.tuners.lora.layer import LoraLayer
 from torch import nn
 
 from .modular_qwen3_moe_fused import MoeFusedLinear, moe_fused_kaiming_uniform_
-from .moe_fused_linear import moe_fused_linear
 
 
 class LoraMoeFusedLinear(nn.Module, LoraLayer):
