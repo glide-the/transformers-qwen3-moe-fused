@@ -39,6 +39,9 @@ def load_sharded_state_dict(save_directory: os.PathLike) -> TStateDict:
 def convert_state_dict_to_fused_(
     state_dict: TStateDict, *, key_prefix: str, param_names: Iterable[str], num_hidden_layers: int, num_experts: int
 ) -> None:
+    if not key_prefix and "layers.0.mlp.experts.0.down_proj.weight" not in state_dict.keys():
+        key_prefix = "model."
+
     for layer_idx in range(num_hidden_layers):
         print(f"Layer {layer_idx}/{num_hidden_layers}")
         for param_name in param_names:
@@ -55,6 +58,9 @@ def convert_state_dict_to_fused_(
 def convert_state_dict_to_unfused_(
     state_dict: TStateDict, *, key_prefix: str, param_names: Iterable[str], num_hidden_layers: int, num_experts: int
 ) -> None:
+    if not key_prefix and "layers.0.mlp.down_proj.weight" not in state_dict.keys():
+        key_prefix = "model."
+
     for layer_idx in range(num_hidden_layers):
         print(f"Layer {layer_idx}/{num_hidden_layers}")
         for param_name in param_names:
@@ -73,7 +79,7 @@ def convert_model_to_fused(
 ) -> None:
     print(f"Loading {in_dir}")
     config = Qwen3MoeConfig.from_pretrained(in_dir)
-    config.architectures = ["Qwen3MoeFusedModel"]
+    config.architectures[0] = config.architectures[0].replace("Qwen3Moe", "Qwen3MoeFused")
     state_dict = load_sharded_state_dict(in_dir)
 
     print("Converting...")
@@ -96,7 +102,7 @@ def convert_model_to_unfused(
 ) -> None:
     print(f"Loading {in_dir}")
     config = Qwen3MoeFusedConfig.from_pretrained(in_dir)
-    config.architectures = ["Qwen3MoeModel"]
+    config.architectures[0] = config.architectures[0].replace("Qwen3MoeFused", "Qwen3Moe")
     state_dict = load_sharded_state_dict(in_dir)
 
     print("Converting...")
