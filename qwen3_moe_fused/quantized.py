@@ -1,0 +1,141 @@
+# Modified from https://github.com/bitsandbytes-foundation/bitsandbytes/blob/1abd5e781013a085f86586b30a248dc769909668/bitsandbytes/nn/modules.py#L377
+
+import warnings
+from typing import Any, Dict, Optional
+
+import torch
+from bitsandbytes.nn.modules import Params4bit, fix_4bit_weight_quant_state_from_module
+from torch import nn
+
+from transformers import BitsAndBytesConfig
+
+from .modular_qwen3_moe_fused import MoeFusedLinear
+
+
+def moe_fused_linear_4bit(input: torch.Tensor, weight: Params4bit, selected_experts: torch.Tensor) -> torch.Tensor:
+    quant_state = weight.quant_state
+    # TODO
+    raise NotImplementedError
+
+
+class MoeFusedLinear4bit(MoeFusedLinear):
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        num_experts: int,
+        *,
+        weight: Optional[torch.Tensor] = None,  # Used for initializing from a non-quantized module
+        compute_dtype: Optional[torch.dtype] = None,
+        compress_statistics: bool = True,
+        quant_type: str = "fp4",
+        quant_storage: torch.dtype = torch.uint8,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        if weight is None:
+            weight = self.weight
+        else:
+            if isinstance(weight, nn.Parameter):
+                weight = weight.data
+            # Avoid allocating a new weight
+            device = torch.device("meta")
+
+        super().__init__(in_features, out_features, num_experts, device=device)
+        self.weight = Params4bit(
+            weight,
+            requires_grad=False,
+            compress_statistics=compress_statistics,
+            quant_type=quant_type,
+            quant_storage=quant_storage,
+            module=self,
+        )
+        # self.persistent_buffers = []  # TODO consider as way to save quant state
+        self.compute_dtype = compute_dtype
+        self.compute_type_is_set = compute_dtype is not None
+        self.quant_state = None
+        self.quant_storage = quant_storage
+
+    @classmethod
+    def from_non_quantized(
+        cls,
+        module: MoeFusedLinear,
+        *,
+        compute_dtype: Optional[torch.dtype] = None,
+        compress_statistics: bool = True,
+        quant_type: str = "fp4",
+        quant_storage: torch.dtype = torch.uint8,
+    ) -> None:
+        return cls(
+            in_features=module.in_features,
+            out_features=module.out_features,
+            num_experts=module.num_experts,
+            weight=module.weight,
+            compute_dtype=compute_dtype,
+            compress_statistics=compress_statistics,
+            quant_type=quant_type,
+            quant_storage=quant_storage,
+            device=None,
+        )
+
+    def set_compute_type(self, x: torch.Tensor) -> None:
+        if x.dtype in [torch.float32, torch.bfloat16]:
+            # the input is in a dtype that is safe to compute in, we switch
+            # to this type for speed and stability
+            self.compute_dtype = x.dtype
+        elif x.dtype == torch.float16:
+            # we take the compoute dtype passed into the layer
+            if self.compute_dtype in [None, torch.float32] and (x.numel() == x.shape[-1]):
+                # single batch inference with input torch.float16 and compute_dtype float32 -> slow inference when it could be fast
+                # warn the user about this
+                warnings.warn(
+                    "Input type into Linear4bit is torch.float16, but bnb_4bit_compute_dtype=torch.float32 (default). "
+                    "This will lead to slow inference.",
+                )
+                warnings.filterwarnings("ignore", message=".*inference.")
+            if self.compute_dtype in [None, torch.float32] and (x.numel() != x.shape[-1]):
+                warnings.warn(
+                    "Input type into Linear4bit is torch.float16, but bnb_4bit_compute_dtype=torch.float32 (default). "
+                    "This will lead to slow inference or training speed.",
+                )
+                warnings.filterwarnings("ignore", message=".*inference or training")
+
+    def _save_to_state_dict(self, destination: Dict[str, Any], prefix: str, keep_vars: bool) -> None:
+        super()._save_to_state_dict(destination, prefix, keep_vars)
+
+        if getattr(self.weight, "quant_state", None) is not None:
+            for k, v in self.weight.quant_state.as_dict(packed=True).items():
+                destination[prefix + "weight." + k] = v if keep_vars else v.detach()
+
+    def forward(self, x: torch.Tensor, selected_experts: torch.Tensor) -> torch.Tensor:
+        fix_4bit_weight_quant_state_from_module(self)
+
+        if not self.compute_type_is_set:
+            self.set_compute_type(x)
+            self.compute_type_is_set = True
+
+        inp_dtype = x.dtype
+        if self.compute_dtype is not None:
+            x = x.to(self.compute_dtype)
+
+        x = moe_fused_linear_4bit(x, self.weight, selected_experts)
+        x = x.to(inp_dtype)
+        return x
+
+
+def quantize_moe_fused_linear_modules(model: nn.Module, config: BitsAndBytesConfig) -> None:
+    for name, module in model.named_children():
+        if isinstance(module, MoeFusedLinear):
+            print("Quantize", name)
+            new_module = MoeFusedLinear4bit.from_non_quantized(
+                module,
+                compute_dtype=config.bnb_4bit_compute_dtype,
+                compress_statistics=config.bnb_4bit_use_double_quant,
+                quant_type=config.bnb_4bit_quant_type,
+                quant_storage=config.bnb_4bit_quant_storage,
+            )
+            # Trigger the quantization
+            new_module = new_module.to(module.weight.device)
+            setattr(model, name, new_module)
+        else:
+            # Recursively visit the children
+            quantize_moe_fused_linear_modules(module, config)

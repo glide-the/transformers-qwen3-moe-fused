@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import torch
 from datasets import Dataset
 from peft import LoraConfig, get_peft_model
 from trl import SFTConfig, SFTTrainer
@@ -17,6 +16,7 @@ from transformers import AutoTokenizer, BitsAndBytesConfig
 def main():
     model_dir = "./pretrained/qwen-moe-tiny-lm"
 
+    # Create a new model
     config = Qwen3MoeFusedConfig(
         hidden_size=16,
         intermediate_size=5,
@@ -31,7 +31,13 @@ def main():
     model = Qwen3MoeFusedForCausalLM(config)
     model.save_pretrained(model_dir)
 
-    bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
+    # Load and quantize the model
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_compute_dtype="bfloat16",
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_use_double_quant=True,
+    )
     model = Qwen3MoeFusedForCausalLM.from_pretrained(model_dir, quantization_config=bnb_config)
 
     lora_config_kwargs = {

@@ -1,6 +1,7 @@
 # Modified from https://github.com/huggingface/transformers/blob/ccf2ca162e33f381e454cdb74bf4b41a51ab976d/src/transformers/models/qwen3_moe/modular_qwen3_moe.py
 
 import math
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -38,8 +39,8 @@ class MoeFusedLinear(nn.Module):
         in_features: int,
         out_features: int,
         num_experts: int,
-        device=None,
-        dtype=None,
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
     ) -> None:
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()

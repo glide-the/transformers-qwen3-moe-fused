@@ -33,10 +33,10 @@ def main():
     model.save_pretrained(model_dir, **max_shard_size_kwarg)
 
     convert_model_to_fused(model_dir, model_fused_dir, max_shard_size=max_shard_size)
-    model_fused = Qwen3MoeFusedModel.from_pretrained(model_fused_dir).to(device, dtype)
+    model_fused = Qwen3MoeFusedModel.from_pretrained(model_fused_dir, device_map=device, torch_dtype=dtype)
 
     convert_model_to_unfused(model_fused_dir, model_roundtrip_dir, max_shard_size=max_shard_size)
-    model_roundtrip = Qwen3MoeModel.from_pretrained(model_roundtrip_dir).to(device, dtype)
+    model_roundtrip = Qwen3MoeModel.from_pretrained(model_roundtrip_dir, device_map=device, torch_dtype=dtype)
 
     input_ids = torch.tensor([[1, 2, 3], [4, 5, 6]], device=device, dtype=torch.int32)
     hidden = model(input_ids=input_ids).last_hidden_state

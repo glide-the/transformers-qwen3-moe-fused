@@ -51,7 +51,7 @@ def main():
         "use_rslora": True,
     }
 
-    model = Qwen3MoeModel.from_pretrained(model_dir)
+    model = Qwen3MoeModel.from_pretrained(model_dir, device_map=device, torch_dtype=dtype)
     lora_config = LoraConfig(**lora_config_kwargs)
     model = get_peft_model(model, lora_config)
 
@@ -61,20 +61,21 @@ def main():
             print("Init", name)
             moe_fused_kaiming_uniform_(param)
 
-    model = model.to(device, dtype)
     model.save_pretrained(lora_dir)
 
     convert_lora_to_fused(lora_dir, lora_fused_dir)
-    model_fused = Qwen3MoeFusedModel.from_pretrained(model_fused_dir)
+    model_fused = Qwen3MoeFusedModel.from_pretrained(model_fused_dir, device_map=device, torch_dtype=dtype)
     lora_config_fused = LoraConfig.from_pretrained(lora_fused_dir)
     lora_config_fused._register_custom_module({MoeFusedLinear: LoraMoeFusedLinear})
-    model_fused = PeftModel.from_pretrained(model_fused, lora_fused_dir, config=lora_config_fused)
-    model_fused = model_fused.to(device, dtype)
+    model_fused = PeftModel.from_pretrained(
+        model_fused, lora_fused_dir, config=lora_config_fused, device_map=device, torch_dtype=dtype
+    )
 
     convert_lora_to_unfused(lora_fused_dir, lora_roundtrip_dir)
-    model_roundtrip = Qwen3MoeModel.from_pretrained(model_roundtrip_dir)
-    model_roundtrip = PeftModel.from_pretrained(model_roundtrip, lora_roundtrip_dir)
-    model_roundtrip = model_roundtrip.to(device, dtype)
+    model_roundtrip = Qwen3MoeModel.from_pretrained(model_roundtrip_dir, device_map=device, torch_dtype=dtype)
+    model_roundtrip = PeftModel.from_pretrained(
+        model_roundtrip, lora_roundtrip_dir, device_map=device, torch_dtype=dtype
+    )
 
     input_ids = torch.tensor([[1, 2, 3], [4, 5, 6]], device=device, dtype=torch.int32)
     hidden = model(input_ids=input_ids).last_hidden_state
