@@ -11,8 +11,8 @@ def main():
     model_dir = "./pretrained/qwen-moe-tiny"
     model_fused_dir = "./pretrained/qwen-moe-tiny-fused"
     model_roundtrip_dir = "./pretrained/qwen-moe-tiny-roundtrip"
-    device = "cuda"
-    dtype = torch.bfloat16
+    device = "cpu"
+    dtype = torch.float32
     set_seed(42)
     max_shard_size = None
 
@@ -38,15 +38,15 @@ def main():
     convert_model_to_unfused(model_fused_dir, model_roundtrip_dir, max_shard_size=max_shard_size)
     model_roundtrip = Qwen3MoeModel.from_pretrained(model_roundtrip_dir).to(device, dtype)
 
-    input_ids = torch.tensor([[1, 2, 3]], device=device, dtype=torch.int32)
+    input_ids = torch.tensor([[1, 2, 3], [4, 5, 6]], device=device, dtype=torch.int32)
     hidden = model(input_ids=input_ids).last_hidden_state
     hidden_fused = model_fused(input_ids=input_ids).last_hidden_state
     hidden_roundtrip = model_roundtrip(input_ids=input_ids).last_hidden_state
     # print(hidden.shape, hidden.device, hidden.dtype)
     # print(hidden_fused.shape, hidden_fused.device, hidden_fused.dtype)
     # print(hidden_roundtrip.shape, hidden_roundtrip.device, hidden_roundtrip.dtype)
-    print(torch.allclose(hidden_fused, hidden, rtol=1e-6, atol=1e-6))
-    print(torch.allclose(hidden_roundtrip, hidden, rtol=1e-6, atol=1e-6))
+    print(torch.allclose(hidden_fused, hidden, rtol=1e-7, atol=1e-7))
+    print(torch.allclose(hidden_roundtrip, hidden, rtol=1e-7, atol=1e-7))
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ def get_rtol_atol(actual, expect):
     eps = torch.tensor(torch.finfo(actual.dtype).eps, device=actual.device, dtype=actual.dtype)
     rdiff = diff / torch.maximum(torch.maximum(actual.abs(), expect.abs()), eps)
     rtol = rdiff.max()
-    return rtol, atol
+    return f"{rtol.item():.3g} {atol.item():.3g}"
 
 
 def main():
@@ -36,13 +36,13 @@ def main():
     model_quantized = Qwen3MoeModel.from_pretrained(model_quantized_dir).to(device)
     model_fused_quantized = Qwen3MoeFusedModel.from_pretrained(model_fused_quantized_dir).to(device)
 
-    input_ids = torch.tensor([[1, 2, 3]], device=device, dtype=torch.int32)
+    input_ids = torch.tensor([[1, 2, 3], [4, 5, 6]], device=device, dtype=torch.int32)
     hidden = model(input_ids=input_ids).last_hidden_state
     hidden_quantized = model_quantized(input_ids=input_ids).last_hidden_state
     hidden_fused_quantized = model_fused_quantized(input_ids=input_ids).last_hidden_state
-    print(hidden)
-    print(hidden_quantized)
-    print(hidden_fused_quantized)
+    # print(hidden)
+    # print(hidden_quantized)
+    # print(hidden_fused_quantized)
     print(get_rtol_atol(hidden_quantized, hidden))
     print(get_rtol_atol(hidden_fused_quantized, hidden))
     print(get_rtol_atol(hidden_fused_quantized, hidden_quantized))

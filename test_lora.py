@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+#
+# Run test_model.py first
+
+import torch
+from peft import LoraConfig, PeftModel, get_peft_model
+
+from convert import convert_lora_to_fused, convert_lora_to_unfused
+from qwen3_moe_fused.lora import LoraMoeFusedLinear
+from qwen3_moe_fused.modular_qwen3_moe_fused import (
+    MoeFusedLinear,
+    Qwen3MoeFusedModel,
+    moe_fused_kaiming_uniform_,
+)
+from transformers import Qwen3MoeModel, set_seed
+
+
+def main():
+    model_dir = "./pretrained/qwen-moe-tiny"
+    lora_dir = "./pretrained/qwen-moe-tiny-lora"
+    model_fused_dir = "./pretrained/qwen-moe-tiny-fused"
+    lora_fused_dir = "./pretrained/qwen-moe-tiny-lora-fused"
+    model_roundtrip_dir = "./pretrained/qwen-moe-tiny-roundtrip"
+    lora_roundtrip_dir = "./pretrained/qwen-moe-tiny-lora-roundtrip"
+    device = "cpu"
+    dtype = torch.float32
+    set_seed(42)
+
+    lora_config_kwargs = {
+        "target_modules": [
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "gate",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+        ],
+        "rank_pattern": {
+            "q_proj": 16,
+            "k_proj": 16,
+            "v_proj": 16,
+            "o_proj": 16,
+            "gate": 16,
+            "gate_proj": 4,
+            "up_proj": 4,
+            "down_proj": 4,
+        },
+        "lora_alpha": 1,
+        "use_rslora": True,
+    }
+
+    model = Qwen3MoeModel.from_pretrained(model_dir)
+    lora_config = LoraConfig(**lora_config_kwargs)
+    model = get_peft_model(model, lora_config)
+
+    # lora_B.weight is inited to zeros. For testing, we make it non-zero
+    for name, param in model.named_parameters():
+        if name.endswith("lora_B.default.weight"):
+            print("Init", name)
+            moe_fused_kaiming_uniform_(param)
+
+    model = model.to(device, dtype)
+    model.save_pretrained(lora_dir)
+
+    convert_lora_to_fused(lora_dir, lora_fused_dir)
+    model_fused = Qwen3MoeFusedModel.from_pretrained(model_fused_dir)
+    lora_config_fused = LoraConfig.from_pretrained(lora_fused_dir)
+    lora_config_fused._register_custom_module({MoeFusedLinear: LoraMoeFusedLinear})
+    model_fused = PeftModel.from_pretrained(model_fused, lora_fused_dir, config=lora_config_fused)
+    model_fused = model_fused.to(device, dtype)
+
+    convert_lora_to_unfused(lora_fused_dir, lora_roundtrip_dir)
+    model_roundtrip = Qwen3MoeModel.from_pretrained(model_roundtrip_dir)
+    model_roundtrip = PeftModel.from_pretrained(model_roundtrip, lora_roundtrip_dir)
+    model_roundtrip = model_roundtrip.to(device, dtype)
+
+    input_ids = torch.tensor([[1, 2, 3], [4, 5, 6]], device=device, dtype=torch.int32)
+    hidden = model(input_ids=input_ids).last_hidden_state
+    hidden_fused = model_fused(input_ids=input_ids).last_hidden_state
+    hidden_roundtrip = model_roundtrip(input_ids=input_ids).last_hidden_state
+    # print(hidden.shape, hidden.device, hidden.dtype)
+    # print(hidden_fused.shape, hidden_fused.device, hidden_fused.dtype)
+    # print(hidden_roundtrip.shape, hidden_roundtrip.device, hidden_roundtrip.dtype)
+    print(torch.allclose(hidden_fused, hidden, rtol=1e-6, atol=1e-6))
+    print(torch.allclose(hidden_roundtrip, hidden, rtol=1e-6, atol=1e-6))
+
+
+if __name__ == "__main__":
+    main()

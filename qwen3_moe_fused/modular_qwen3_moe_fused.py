@@ -1,6 +1,6 @@
 # Modified from https://github.com/huggingface/transformers/blob/ccf2ca162e33f381e454cdb74bf4b41a51ab976d/src/transformers/models/qwen3_moe/modular_qwen3_moe.py
 
-from math import sqrt
+import math
 
 import torch
 import torch.nn.functional as F
@@ -16,6 +16,14 @@ from transformers.models.qwen3_moe.modeling_qwen3_moe import (
 
 from .configuration_qwen3_moe_fused import Qwen3MoeFusedConfig
 from .moe_fused_linear import moe_fused_linear
+
+
+def moe_fused_kaiming_uniform_(weight):
+    # Kaiming uniform on in_features
+    # Although Qwen's default activation is silu, we set the gain `a = sqrt(5)` following the original Linear
+    in_features = weight.shape[-1]
+    bound = math.sqrt(3 * 5 / in_features)
+    nn.init.uniform_(weight, -bound, bound)
 
 
 class MoeFusedLinear(nn.Module):
@@ -42,10 +50,7 @@ class MoeFusedLinear(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
-        # Kaiming uniform on in_features
-        # Although Qwen's default activation is silu, we set the gain `a = sqrt(5)` following the original Linear
-        bound = sqrt(3 * 5 / self.in_features)
-        nn.init.uniform_(self.weight, -bound, bound)
+        moe_fused_kaiming_uniform_(self.weight)
 
     def forward(self, input: torch.Tensor, selected_experts: torch.Tensor) -> torch.Tensor:
         return moe_fused_linear(input, self.weight, selected_experts)
@@ -93,6 +98,7 @@ class Qwen3MoeFusedSparseMoeBlock(nn.Module):
         del gate_h, up_h
 
         hidden_states = torch.einsum("beo,be->bo", hidden_states, routing_weights)
+        hidden_states = hidden_states.view(batch_size, sequence_length, hidden_dim)
         return hidden_states, router_logits
 
 
