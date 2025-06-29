@@ -5,7 +5,7 @@
 import torch
 
 from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedModel
-from qwen3_moe_fused.quantized import quantize_moe_fused_linear_modules
+from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
 from transformers import BitsAndBytesConfig, Qwen3MoeModel, set_seed
 
 
@@ -19,6 +19,8 @@ def get_rtol_atol(actual, expect):
 
 
 def main():
+    patch_bnb_quantizer()
+
     model_dir = "./pretrained/qwen-moe-tiny"
     model_quantized_dir = "./pretrained/qwen-moe-tiny-quantized"
     model_fused_dir = "./pretrained/qwen-moe-tiny-fused"
@@ -34,20 +36,13 @@ def main():
         bnb_4bit_use_double_quant=True,
     )
     model_quantized = Qwen3MoeModel.from_pretrained(
-        model_dir,
-        device_map=device,
-        torch_dtype=dtype,
-        quantization_config=bnb_config,
+        model_dir, device_map=device, torch_dtype=dtype, quantization_config=bnb_config
     )
     model_quantized.save_pretrained(model_quantized_dir)
 
     model_fused_quantized = Qwen3MoeFusedModel.from_pretrained(
-        model_fused_dir,
-        device_map=device,
-        torch_dtype=dtype,
-        quantization_config=bnb_config,
+        model_fused_dir, device_map=device, torch_dtype=dtype, quantization_config=bnb_config
     )
-    quantize_moe_fused_linear_modules(model_fused_quantized, bnb_config)
     model_fused_quantized.save_pretrained(model_fused_quantized_dir)
 
     model = Qwen3MoeModel.from_pretrained(model_dir, device_map=device)

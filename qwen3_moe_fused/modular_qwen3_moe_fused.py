@@ -16,7 +16,7 @@ from transformers.models.qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeModel,
 )
 
-from .moe_fused_linear import moe_fused_linear
+from .functional import moe_fused_linear
 
 
 def moe_fused_kaiming_uniform_(weight):

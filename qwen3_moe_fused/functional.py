@@ -56,7 +56,7 @@ def moe_fused_linear_torch(
 moe_fused_linear = moe_fused_linear_torch
 
 
-def test():
+def _test():
     from math import sqrt
 
     batch_size = 2
@@ -78,4 +78,4 @@ def test():
 
 
 if __name__ == "__main__":
-    test()
+    _test()
