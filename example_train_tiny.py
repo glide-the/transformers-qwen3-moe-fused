@@ -4,20 +4,19 @@ from datasets import Dataset
 from peft import LoraConfig, get_peft_model
 from trl import SFTConfig, SFTTrainer
 
-from qwen3_moe_fused.configuration_qwen3_moe_fused import Qwen3MoeFusedConfig
 from qwen3_moe_fused.lora import LoraMoeFusedLinear
 from qwen3_moe_fused.modular_qwen3_moe_fused import (
     MoeFusedLinear,
     Qwen3MoeFusedForCausalLM,
 )
-from transformers import AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoTokenizer, BitsAndBytesConfig, Qwen3MoeConfig
 
 
 def main():
     model_dir = "./pretrained/qwen-moe-tiny-lm"
 
     # Create a new model
-    config = Qwen3MoeFusedConfig(
+    config = Qwen3MoeConfig(
         hidden_size=16,
         intermediate_size=5,
         num_hidden_layers=2,

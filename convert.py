@@ -11,7 +11,6 @@ from huggingface_hub.serialization import save_torch_state_dict
 from peft import LoraConfig
 from tqdm import tqdm
 
-from qwen3_moe_fused.configuration_qwen3_moe_fused import Qwen3MoeFusedConfig
 from transformers import Qwen3MoeConfig
 
 
@@ -101,7 +100,7 @@ def convert_model_to_unfused(
     in_dir: os.PathLike, out_dir: os.PathLike, *, max_shard_size: Optional[Union[int, str]] = None
 ) -> None:
     print(f"Loading {in_dir}")
-    config = Qwen3MoeFusedConfig.from_pretrained(in_dir)
+    config = Qwen3MoeConfig.from_pretrained(in_dir)
     config.architectures[0] = config.architectures[0].replace("Qwen3MoeFused", "Qwen3Moe")
     state_dict = load_sharded_state_dict(in_dir)
 

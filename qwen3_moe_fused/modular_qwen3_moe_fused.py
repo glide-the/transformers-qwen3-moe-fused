@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from transformers import Qwen3MoeConfig
 from transformers.activations import ACT2FN
 from transformers.models.qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
@@ -15,7 +16,6 @@ from transformers.models.qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeModel,
 )
 
-from .configuration_qwen3_moe_fused import Qwen3MoeFusedConfig
 from .moe_fused_linear import moe_fused_linear
 
 
@@ -61,7 +61,7 @@ class MoeFusedLinear(nn.Module):
 
 
 class Qwen3MoeFusedSparseMoeBlock(nn.Module):
-    def __init__(self, config: Qwen3MoeFusedConfig) -> None:
+    def __init__(self, config: Qwen3MoeConfig) -> None:
         super().__init__()
         self.num_experts = config.num_experts
         self.num_selected = config.num_experts_per_tok
@@ -104,7 +104,7 @@ class Qwen3MoeFusedSparseMoeBlock(nn.Module):
 
 
 class Qwen3MoeFusedDecoderLayer(Qwen3MoeDecoderLayer):
-    def __init__(self, config: Qwen3MoeFusedConfig, layer_idx: int) -> None:
+    def __init__(self, config: Qwen3MoeConfig, layer_idx: int) -> None:
         super().__init__(config, layer_idx)
         if (layer_idx not in config.mlp_only_layers) and (
             config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
@@ -115,7 +115,7 @@ class Qwen3MoeFusedDecoderLayer(Qwen3MoeDecoderLayer):
 
 
 class Qwen3MoeFusedModel(Qwen3MoeModel):
-    def __init__(self, config: Qwen3MoeFusedConfig) -> None:
+    def __init__(self, config: Qwen3MoeConfig) -> None:
         super().__init__(config)
         self.layers = nn.ModuleList(
             [Qwen3MoeFusedDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -123,6 +123,6 @@ class Qwen3MoeFusedModel(Qwen3MoeModel):
 
 
 class Qwen3MoeFusedForCausalLM(Qwen3MoeForCausalLM):
-    def __init__(self, config: Qwen3MoeFusedConfig) -> None:
+    def __init__(self, config: Qwen3MoeConfig) -> None:
         super().__init__(config)
         self.model = Qwen3MoeFusedModel(config)
