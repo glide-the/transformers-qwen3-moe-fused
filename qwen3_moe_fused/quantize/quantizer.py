@@ -1,9 +1,11 @@
 from inspect import signature
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 from accelerate import init_empty_weights
 from bitsandbytes.nn import Linear4bit
 from torch import nn
+from transformers import BitsAndBytesConfig
+from transformers.modeling_utils import PreTrainedModel
 from transformers.pytorch_utils import Conv1D
 from transformers.quantizers.quantizer_bnb_4bit import Bnb4BitHfQuantizer
 from transformers.utils import logging
@@ -18,9 +20,9 @@ logger = logging.get_logger(__name__)
 # Modified from https://github.com/huggingface/transformers/blob/ccf2ca162e33f381e454cdb74bf4b41a51ab976d/src/transformers/integrations/bitsandbytes.py#L150
 def _replace_with_bnb_moe_fused_linear(
     model,
-    modules_to_not_convert: List[str],
-    current_key_name: List[str],
-    quantization_config: "BitsAndBytesConfig",
+    modules_to_not_convert: list[str],
+    current_key_name: list[str],
+    quantization_config: BitsAndBytesConfig,
     has_been_replaced: bool,
 ) -> bool:
     for name, module in model.named_children():
@@ -88,7 +90,7 @@ def _replace_with_bnb_moe_fused_linear(
 
 # model is modified in place
 def replace_with_bnb_moe_fused_linear(
-    model: nn.Module, modules_to_not_convert: Optional[List[str]], quantization_config: "BitsAndBytesConfig"
+    model: nn.Module, modules_to_not_convert: Optional[list[str]], quantization_config: BitsAndBytesConfig
 ) -> None:
     modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
     with init_empty_weights():
@@ -109,9 +111,9 @@ def replace_with_bnb_moe_fused_linear(
 def patch_bnb_quantizer():
     def _process_model_before_weight_loading(
         self,
-        model: "PreTrainedModel",
-        device_map: Union[str, Dict[str, Any]],
-        keep_in_fp32_modules: Optional[List[str]] = None,
+        model: PreTrainedModel,
+        device_map: Union[str, dict[str, Any]],
+        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ) -> None:
         self.modules_to_not_convert = self.get_modules_to_not_convert(

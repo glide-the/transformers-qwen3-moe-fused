@@ -3,7 +3,8 @@
 import json
 import os
 import re
-from typing import Dict, Iterable, Optional, Union
+from collections.abc import Iterable
+from typing import Optional, Union
 
 import safetensors.torch
 import torch
@@ -13,7 +14,7 @@ from tqdm import tqdm
 from transformers import Qwen3MoeConfig
 
 
-TStateDict = Dict[str, torch.Tensor]
+TStateDict = dict[str, torch.Tensor]
 
 
 def load_sharded_state_dict(save_directory: os.PathLike) -> TStateDict:

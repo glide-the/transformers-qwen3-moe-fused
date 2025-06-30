@@ -2,7 +2,7 @@
 # TODO: support IPEX
 
 import warnings
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import torch
 from bitsandbytes.functional import dequantize_4bit
@@ -71,7 +71,7 @@ class MoeFusedLinear4bit(MoeFusedLinear):
                 )
                 warnings.filterwarnings("ignore", message=".*inference or training")
 
-    def _save_to_state_dict(self, destination: Dict[str, Any], prefix: str, keep_vars: bool) -> None:
+    def _save_to_state_dict(self, destination: dict[str, Any], prefix: str, keep_vars: bool) -> None:
         super()._save_to_state_dict(destination, prefix, keep_vars)
 
         if getattr(self.weight, "quant_state", None) is not None:
