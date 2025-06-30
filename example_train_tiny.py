@@ -3,6 +3,7 @@
 import torch
 from datasets import Dataset
 from peft import LoraConfig, get_peft_model
+from transformers import AutoTokenizer, BitsAndBytesConfig, Qwen3MoeConfig
 from trl import SFTConfig, SFTTrainer
 
 from qwen3_moe_fused.lora import LoraMoeFusedLinear
@@ -11,7 +12,6 @@ from qwen3_moe_fused.modular_qwen3_moe_fused import (
     Qwen3MoeFusedForCausalLM,
 )
 from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
-from transformers import AutoTokenizer, BitsAndBytesConfig, Qwen3MoeConfig
 
 
 def main():
@@ -54,6 +54,7 @@ def main():
             "up_proj",
             "down_proj",
         ],
+        # We can set a smaller rank for MoE layers
         "rank_pattern": {
             "q_proj": 16,
             "k_proj": 16,

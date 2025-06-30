@@ -4,15 +4,15 @@
 
 import torch
 from peft import LoraConfig, PeftModel, get_peft_model
+from transformers import Qwen3MoeModel, set_seed
 
-from convert import convert_lora_to_fused, convert_lora_to_unfused
+from qwen3_moe_fused.convert import convert_lora_to_fused, convert_lora_to_unfused
 from qwen3_moe_fused.lora import LoraMoeFusedLinear
 from qwen3_moe_fused.modular_qwen3_moe_fused import (
     MoeFusedLinear,
     Qwen3MoeFusedModel,
     moe_fused_kaiming_uniform_,
 )
-from transformers import Qwen3MoeModel, set_seed
 
 
 def main():
@@ -37,6 +37,7 @@ def main():
             "up_proj",
             "down_proj",
         ],
+        # We can set a smaller rank for MoE layers
         "rank_pattern": {
             "q_proj": 16,
             "k_proj": 16,

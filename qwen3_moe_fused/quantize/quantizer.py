@@ -4,7 +4,6 @@ from typing import Any, Dict, List, Optional, Union
 from accelerate import init_empty_weights
 from bitsandbytes.nn import Linear4bit
 from torch import nn
-
 from transformers.pytorch_utils import Conv1D
 from transformers.quantizers.quantizer_bnb_4bit import Bnb4BitHfQuantizer
 from transformers.utils import logging

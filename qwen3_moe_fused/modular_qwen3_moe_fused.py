@@ -6,7 +6,6 @@ from typing import Optional
 import torch
 import torch.nn.functional as F
 from torch import nn
-
 from transformers import Qwen3MoeConfig
 from transformers.activations import ACT2FN
 from transformers.models.qwen3_moe.modeling_qwen3_moe import (

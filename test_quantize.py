@@ -3,10 +3,10 @@
 # Run test_model.py first
 
 import torch
+from transformers import BitsAndBytesConfig, Qwen3MoeModel, set_seed
 
 from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedModel
 from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
-from transformers import BitsAndBytesConfig, Qwen3MoeModel, set_seed
 
 
 def get_rtol_atol(actual, expect):

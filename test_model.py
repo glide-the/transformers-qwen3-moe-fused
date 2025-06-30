@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 import torch
-
-from convert import convert_model_to_fused, convert_model_to_unfused
-from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedModel
 from transformers import Qwen3MoeConfig, Qwen3MoeModel, set_seed
+
+from qwen3_moe_fused.convert import convert_model_to_fused, convert_model_to_unfused
+from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedModel
 
 
 def main():
