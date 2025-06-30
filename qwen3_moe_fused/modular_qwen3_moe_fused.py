@@ -90,14 +90,19 @@ class Qwen3MoeFusedSparseMoeBlock(nn.Module):
         # we cast back to the input dtype
         routing_weights = routing_weights.to(hidden_states.dtype)
 
-        hidden_states = hidden_states.unsqueeze(1).broadcast_to(M, self.num_selected, hidden_dim).contiguous()
+        hidden_states = hidden_states.unsqueeze(1).broadcast_to(M, self.num_selected, hidden_dim)
+        # hidden_states must be contiguous
+        hidden_states = hidden_states.reshape(M * self.num_selected, hidden_dim)
+        selected_experts = selected_experts.view(M * self.num_selected)
         # TODO: Fuse gate_proj and up_proj, or fuse gate_proj and silu
         gate_h = self.act_fn(self.gate_proj(hidden_states, selected_experts))
         up_h = self.up_proj(hidden_states, selected_experts)
         hidden_states = self.down_proj(gate_h * up_h, selected_experts)
         del gate_h, up_h
 
+        hidden_states = hidden_states.view(M, self.num_selected, hidden_dim)
         hidden_states = torch.einsum("beo,be->bo", hidden_states, routing_weights)
+
         hidden_states = hidden_states.view(batch_size, sequence_length, hidden_dim)
         return hidden_states, router_logits
 
