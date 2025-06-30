@@ -43,8 +43,8 @@ def main():
     )
     model = Qwen3MoeFusedForCausalLM.from_pretrained(model_dir, quantization_config=bnb_config)
 
-    lora_config_kwargs = {
-        "target_modules": [
+    lora_config = LoraConfig(
+        target_modules=[
             "q_proj",
             "k_proj",
             "v_proj",
@@ -55,7 +55,8 @@ def main():
             "down_proj",
         ],
         # We can set a smaller rank for MoE layers
-        "rank_pattern": {
+        # With rslora, we don't need to set a different alpha for them
+        rank_pattern={
             "q_proj": 16,
             "k_proj": 16,
             "v_proj": 16,
@@ -65,10 +66,9 @@ def main():
             "up_proj": 4,
             "down_proj": 4,
         },
-        "lora_alpha": 1,
-        "use_rslora": True,
-    }
-    lora_config = LoraConfig(**lora_config_kwargs)
+        lora_alpha=1,
+        use_rslora=True,
+    )
     lora_config._register_custom_module({MoeFusedLinear: LoraMoeFusedLinear})
     model = get_peft_model(model, lora_config)
 

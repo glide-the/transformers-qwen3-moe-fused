@@ -26,8 +26,8 @@ def main():
     dtype = torch.float32
     set_seed(42)
 
-    lora_config_kwargs = {
-        "target_modules": [
+    lora_config = LoraConfig(
+        target_modules=[
             "q_proj",
             "k_proj",
             "v_proj",
@@ -38,7 +38,8 @@ def main():
             "down_proj",
         ],
         # We can set a smaller rank for MoE layers
-        "rank_pattern": {
+        # With rslora, we don't need to set a different alpha for them
+        rank_pattern={
             "q_proj": 16,
             "k_proj": 16,
             "v_proj": 16,
@@ -48,12 +49,12 @@ def main():
             "up_proj": 4,
             "down_proj": 4,
         },
-        "lora_alpha": 1,
-        "use_rslora": True,
-    }
+        lora_alpha=1,
+        use_rslora=True,
+    )
+    lora_config._register_custom_module({MoeFusedLinear: LoraMoeFusedLinear})
 
     model = Qwen3MoeModel.from_pretrained(model_dir, device_map=device, torch_dtype=dtype)
-    lora_config = LoraConfig(**lora_config_kwargs)
     model = get_peft_model(model, lora_config)
 
     # lora_B.weight is inited to zeros. For testing, we make it non-zero
@@ -66,10 +67,10 @@ def main():
 
     convert_lora_to_fused(lora_dir, lora_fused_dir)
     model_fused = Qwen3MoeFusedModel.from_pretrained(model_fused_dir, device_map=device, torch_dtype=dtype)
-    lora_config_fused = LoraConfig.from_pretrained(lora_fused_dir)
-    lora_config_fused._register_custom_module({MoeFusedLinear: LoraMoeFusedLinear})
+    # Explicitly pass `config=lora_config`, because `adapter_config.json` in `lora_fused_dir` does not save
+    # `_register_custom_module({MoeFusedLinear: LoraMoeFusedLinear})`
     model_fused = PeftModel.from_pretrained(
-        model_fused, lora_fused_dir, config=lora_config_fused, device_map=device, torch_dtype=dtype
+        model_fused, lora_fused_dir, config=lora_config, device_map=device, torch_dtype=dtype
     )
 
     convert_lora_to_unfused(lora_fused_dir, lora_roundtrip_dir)
