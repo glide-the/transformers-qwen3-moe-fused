@@ -7,7 +7,6 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from transformers import Qwen3MoeConfig
-from transformers.activations import ACT2FN
 from transformers.models.qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
     Qwen3MoeForCausalLM,
@@ -16,6 +15,7 @@ from transformers.models.qwen3_moe.modeling_qwen3_moe import (
 )
 
 from .functional import moe_fused_linear
+from .kernels.silu_mul import silu_mul
 
 
 def moe_fused_kaiming_uniform_(weight):
@@ -72,7 +72,7 @@ class Qwen3MoeFusedSparseMoeBlock(nn.Module):
         self.gate_proj = MoeFusedLinear(self.hidden_size, self.moe_intermediate_size, config.num_experts)
         self.up_proj = MoeFusedLinear(self.hidden_size, self.moe_intermediate_size, config.num_experts)
         self.down_proj = MoeFusedLinear(self.moe_intermediate_size, self.hidden_size, config.num_experts)
-        self.act_fn = ACT2FN[config.hidden_act]
+        assert config.hidden_act == "silu"
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -82,6 +82,9 @@ class Qwen3MoeFusedSparseMoeBlock(nn.Module):
         # router_logits: (M, num_experts)
         router_logits = self.gate(hidden_states)
 
+        # TODO: Fuse softmax and topk
+        # See https://huggingface.co/kernels-community/moe/blob/main/moe/topk_softmax_kernels.cu
+        # But a Triton kernel will be easier to install
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float32)
         # routing_weights, selected_experts: (M, num_selected)
         routing_weights, selected_experts = torch.topk(routing_weights, self.num_selected, dim=-1)
@@ -94,11 +97,11 @@ class Qwen3MoeFusedSparseMoeBlock(nn.Module):
         # hidden_states must be contiguous
         hidden_states = hidden_states.reshape(M * self.num_selected, hidden_dim)
         selected_experts = selected_experts.view(M * self.num_selected)
-        # TODO: Fuse gate_proj and up_proj, or fuse gate_proj and silu
-        gate_h = self.act_fn(self.gate_proj(hidden_states, selected_experts))
+        gate_h = self.gate_proj(hidden_states, selected_experts)
         up_h = self.up_proj(hidden_states, selected_experts)
-        hidden_states = self.down_proj(gate_h * up_h, selected_experts)
+        hidden_states = silu_mul(gate_h, up_h)
         del gate_h, up_h
+        hidden_states = self.down_proj(hidden_states, selected_experts)
 
         hidden_states = hidden_states.view(M, self.num_selected, hidden_dim)
         hidden_states = torch.einsum("beo,be->bo", hidden_states, routing_weights)

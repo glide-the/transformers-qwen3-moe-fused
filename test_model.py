@@ -11,7 +11,7 @@ def main():
     model_dir = "./pretrained/qwen-moe-tiny"
     model_fused_dir = "./pretrained/qwen-moe-tiny-fused"
     model_roundtrip_dir = "./pretrained/qwen-moe-tiny-roundtrip"
-    device = "cpu"
+    device = "cuda"
     dtype = torch.float32
     set_seed(42)
     max_shard_size = None

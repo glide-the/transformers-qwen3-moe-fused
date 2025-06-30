@@ -22,7 +22,7 @@ def main():
     lora_fused_dir = "./pretrained/qwen-moe-tiny-lora-fused"
     model_roundtrip_dir = "./pretrained/qwen-moe-tiny-roundtrip"
     lora_roundtrip_dir = "./pretrained/qwen-moe-tiny-lora-roundtrip"
-    device = "cpu"
+    device = "cuda"
     dtype = torch.float32
     set_seed(42)
 

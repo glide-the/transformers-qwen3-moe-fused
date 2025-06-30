@@ -18,7 +18,7 @@ def moe_fused_linear_naive(
 
 
 # TODO: Write a Triton kernel to avoid allocating an array of shape (b, o, i)
-# TODO: Test if rearranging the layouts can improve cache hit
+# See https://github.com/triton-lang/triton/blob/main/python/triton_kernels/triton_kernels/matmul_ogs.py
 def moe_fused_linear_torch(
     input: torch.Tensor,
     weight: torch.Tensor,
