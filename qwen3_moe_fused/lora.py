@@ -1,4 +1,4 @@
-# Modified from https://github.com/huggingface/peft/blob/456292649aea64ef6b00f05b93aa9d1d93b31862/src/peft/tuners/lora/layer.py#L585
+# Modified from https://github.com/huggingface/peft/blob/e34852f7b67d51ba7ef871051b1236e9558c650e/src/peft/tuners/lora/layer.py#L585
 
 import math
 from typing import Optional, Union

@@ -1,4 +1,4 @@
-# Modified from https://github.com/bitsandbytes-foundation/bitsandbytes/blob/1abd5e781013a085f86586b30a248dc769909668/bitsandbytes/nn/modules.py#L377
+# Modified from https://github.com/bitsandbytes-foundation/bitsandbytes/blob/888788d75db8ff8e8888838307119f98d1235c24/bitsandbytes/nn/modules.py#L377
 # TODO: support IPEX
 
 import warnings

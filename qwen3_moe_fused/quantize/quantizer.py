@@ -17,7 +17,7 @@ from .layer import MoeFusedLinear4bit
 logger = logging.get_logger(__name__)
 
 
-# Modified from https://github.com/huggingface/transformers/blob/ccf2ca162e33f381e454cdb74bf4b41a51ab976d/src/transformers/integrations/bitsandbytes.py#L150
+# Modified from https://github.com/huggingface/transformers/blob/508a7040556dc6b45f09174c662a9632284b2445/src/transformers/integrations/bitsandbytes.py#L150
 def _replace_with_bnb_moe_fused_linear(
     model,
     modules_to_not_convert: list[str],

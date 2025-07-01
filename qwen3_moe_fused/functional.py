@@ -18,7 +18,9 @@ def moe_fused_linear_naive(
 
 
 # TODO: Write a Triton kernel to avoid allocating an array of shape (b, o, i)
-# See https://github.com/triton-lang/triton/blob/main/python/triton_kernels/triton_kernels/matmul_ogs.py
+# See https://github.com/triton-lang/triton/blob/dd1c3d429d1c24904722ac699ea5750bc694c4d6/python/triton_kernels/triton_kernels/matmul_ogs.py
+# https://github.com/ggml-org/llama.cpp/blob/a0535ffa0d35fccfec3e1a0a3bfc9dbb6054d7c0/ggml/src/ggml-cuda/ggml-cuda.cu#L2065
+# https://github.com/vllm-project/vllm/blob/015fab8c2fa4db8776f7e91abd50371911673d88/vllm/model_executor/layers/fused_moe/fused_moe.py
 def moe_fused_linear_torch(
     input: torch.Tensor,
     weight: torch.Tensor,

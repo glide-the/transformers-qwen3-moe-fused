@@ -1,4 +1,4 @@
-# Modified from https://github.com/huggingface/transformers/blob/ccf2ca162e33f381e454cdb74bf4b41a51ab976d/src/transformers/models/qwen3_moe/modular_qwen3_moe.py
+# Modified from https://github.com/huggingface/transformers/blob/bdf5fb70aa11782cce22027d76879f71f4e41c1e/src/transformers/models/qwen3_moe/modular_qwen3_moe.py
 
 import math
 from typing import Optional
