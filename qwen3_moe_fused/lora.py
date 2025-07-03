@@ -139,3 +139,16 @@ class LoraMoeFusedLinear(nn.Module, LoraLayer):
     def __repr__(self) -> str:
         rep = super().__repr__()
         return "lora." + rep
+
+
+# Dirty patch in case a package generates a LoraConfig and we cannot access it
+def patch_lora_config():
+    from peft import LoraConfig
+
+    old_init = LoraConfig.__init__
+
+    def new_init(self, *args, **kwargs):
+        old_init(self, *args, **kwargs)
+        self._register_custom_module({MoeFusedLinear: LoraMoeFusedLinear})
+
+    LoraConfig.__init__ = new_init

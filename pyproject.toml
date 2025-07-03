@@ -6,6 +6,8 @@ line-length = 119
 [tool.isort]
 lines_after_imports = 2
 # known_first_party = ["transformers"]
+known_unsloth = ["unsloth"]
+sections = ["FUTURE", "STDLIB", "UNSLOTH", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 
 [tool.coverage.run]
 source = ["transformers"]
@@ -43,6 +45,8 @@ extend-safe-fixes = ["UP006"]
 [tool.ruff.lint.isort]
 lines-after-imports = 2
 # known-first-party = ["transformers"]
+known-unsloth = ["unsloth"]
+sections = ["FUTURE", "STDLIB", "UNSLOTH", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 
 [tool.ruff.format]
 # Like Black, use double quotes for strings.
