@@ -28,7 +28,7 @@ import triton.language as tl
     key=["I", "O"],
 )
 @triton.jit
-def dot_kernel(
+def _index_matmul_kernel(
     # Pointers
     x_ptr,
     w_ptr,
@@ -66,7 +66,7 @@ def dot_kernel(
         _x = tl.load(x_ptrs, mask=mask_i, other=0.0)
 
         # matrix-vector mul
-        accumulator += tl.sum(_w * _x[None, :], axis=1)
+        accumulator += tl.sum(_w * _x[None, :], axis=1, dtype=tl.float32)
 
         w_ptrs += stride_wi * BLOCK_SIZE_I
         x_ptrs += stride_xi * BLOCK_SIZE_I
@@ -78,6 +78,7 @@ def dot_kernel(
     tl.store(out_ptrs, accumulator, mask=mask_o)
 
 
+# out[b, o] = sum_i w[s[b], o, i] * x[b, i]
 def index_matmul(x: torch.Tensor, w: torch.Tensor, s: torch.Tensor) -> torch.Tensor:
     assert x.is_cuda
     assert w.device == x.device
@@ -97,7 +98,7 @@ def index_matmul(x: torch.Tensor, w: torch.Tensor, s: torch.Tensor) -> torch.Ten
 
     out = torch.empty((B, O), dtype=x.dtype, device=x.device)
     grid = lambda META: (B, triton.cdiv(O, META["BLOCK_SIZE_O"]))
-    dot_kernel[grid](
+    _index_matmul_kernel[grid](
         # Pointers
         x,
         w,

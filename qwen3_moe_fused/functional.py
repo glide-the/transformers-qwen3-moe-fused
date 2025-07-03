@@ -19,6 +19,28 @@ def moe_fused_linear_naive(
     return output
 
 
+def moe_fused_linear_naive_bwd(
+    grad_output: torch.Tensor,
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    selected_experts: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, None]:
+    batch_size, in_features = input.shape
+    num_experts, out_features, _ = weight.shape
+
+    grad_input = torch.empty_like(input)
+    for b in range(batch_size):
+        _weight = weight[selected_experts[b], :, :]
+        _grad_output = grad_output[b, :]
+        grad_input[b, :] = _grad_output @ _weight
+
+    grad_weight = torch.zeros_like(weight)
+    for b in range(batch_size):
+        grad_weight[selected_experts[b], :, :] += grad_output[b, :, None] * input[b, None, :]
+
+    return grad_input, grad_weight, None
+
+
 def moe_fused_linear_torch(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -42,9 +64,32 @@ def moe_fused_linear_torch(
     batch_size, in_features = input.shape
     num_experts, out_features, _ = weight.shape
 
-    weight = weight[selected_experts]
-    output = torch.einsum("boi,bi->bo", weight, input)
+    weight_selected = weight[selected_experts]
+    output = torch.einsum("boi,bi->bo", weight_selected, input)
     return output
+
+
+def moe_fused_linear_torch_bwd(
+    grad_output: torch.Tensor,
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    selected_experts: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, None]:
+    batch_size, in_features = input.shape
+    num_experts, out_features, _ = weight.shape
+
+    # grad_input[b, i] = sum_o weight[selected_experts[b], o, i] * grad_output[b, o]
+    weight_selected = weight[selected_experts]
+    grad_input = torch.einsum("bo,boi->bi", grad_output, weight_selected)
+
+    # for b in range(batch_size):
+    #     grad_weight[selected_experts[b], o, i] += grad_output[b, o] * input[b, i]
+    grad_weight_selected = torch.einsum("bo,bi->boi", grad_output, input)
+    idx = selected_experts.to(torch.int64).view(batch_size, 1, 1).expand(-1, out_features, in_features)
+    grad_weight = torch.zeros_like(weight)
+    grad_weight.scatter_add_(0, idx, grad_weight_selected)
+
+    return grad_input, grad_weight, None
 
 
 moe_fused_linear_triton = index_matmul
