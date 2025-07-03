@@ -2,6 +2,12 @@
 #
 # Example to train a tiny model using Unsloth
 # Run example_create_tiny.py first
+#
+# If it shows `NameError: name 'Any' is not defined.`
+# then we need to add a line:
+# source = source.replace(": Any", "")
+# after https://github.com/unslothai/unsloth-zoo/blob/362fb45ee5906052bf09a43f1052c578159069ac/unsloth_zoo/compiler.py#L1283
+# See https://github.com/unslothai/unsloth/issues/2874
 
 import os
 
@@ -23,7 +29,7 @@ def main():
     patch_bnb_quantizer()
     patch_lora_config()
 
-    model_dir = "./pretrained/qwen-moe-tiny-lm"
+    model_dir = "./pretrained/qwen-moe-tiny-lm-quantized"
 
     model, tokenizer = FastModel.from_pretrained(model_dir, auto_model=Qwen3MoeFusedForCausalLM)
 
@@ -58,6 +64,7 @@ def main():
         weight_decay=1e-2,
         num_train_epochs=1,
         logging_steps=1,
+        save_steps=3,
         bf16=True,
         optim="adamw_8bit",
         dataset_text_field="text",
