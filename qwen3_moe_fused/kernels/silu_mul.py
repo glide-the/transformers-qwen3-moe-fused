@@ -1,3 +1,5 @@
+# Borrowed from Liger Kernel. We can also use Unsloth's kernel
+
 import torch
 import torch.nn.functional as F
 from liger_kernel.ops.swiglu import LigerSiLUMulFunction

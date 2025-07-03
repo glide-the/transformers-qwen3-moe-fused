@@ -4,11 +4,27 @@ from .kernels.index_matmul import index_matmul
 from .kernels.index_matmul_sorted import index_matmul_sorted
 
 
+# Reference implementation of index_matmul
 def _moe_fused_linear_naive_fwd(
     input: torch.Tensor,
     weight: torch.Tensor,
     selected_experts: torch.Tensor,
 ) -> torch.Tensor:
+    """
+    Computes a MoE linear operation using vectorized operations.
+
+    The operation is defined as:
+    `output[b, o] = sum_i weight[selected_experts[b], o, i] * input[b, i]`
+
+    Args:
+        input (`torch.FloatTensor`): input tensor of shape `(batch_size, in_features)`.
+        weight (`torch.FloatTensor`): weight tensor of shape `(num_experts, out_features, in_features)`.
+        selected_experts (`torch.LongTensor`): tensor of selected expert indices in shape `(batch_size,)`.
+            Each element is in the range `[0, num_experts)`.
+
+    Returns:
+        output (`torch.FloatTensor`): output tensor of shape `(batch_size, out_features)`.
+    """
     batch_size, in_features = input.shape
     num_experts, out_features, _ = weight.shape
 
@@ -61,26 +77,13 @@ def _moe_fused_linear_naive_bwd(
     return grad_input, grad_weight, None
 
 
+# Vectorized version of _moe_fused_linear_naive_fwd,
+# but it allocates weight_selected (batch_size, out_features, in_features) and takes too much memory
 def _moe_fused_linear_torch_fwd(
     input: torch.Tensor,
     weight: torch.Tensor,
     selected_experts: torch.Tensor,
 ) -> torch.Tensor:
-    """
-    Computes a MoE linear operation using vectorized operations.
-
-    The operation is defined as:
-    `output[b, o] = sum_i weight[selected_experts[b], o, i] * input[b, i]`
-
-    Args:
-        input (`torch.FloatTensor`): input tensor of shape `(batch_size, in_features)`.
-        weight (`torch.FloatTensor`): weight tensor of shape `(num_experts, out_features, in_features)`.
-        selected_experts (`torch.LongTensor`): tensor of selected expert indices in shape `(batch_size,)`.
-            Each element is in the range `[0, num_experts)`.
-
-    Returns:
-        output (`torch.FloatTensor`): output tensor of shape `(batch_size, out_features)`.
-    """
     batch_size, in_features = input.shape
     num_experts, out_features, _ = weight.shape
 

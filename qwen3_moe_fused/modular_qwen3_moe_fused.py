@@ -99,6 +99,7 @@ class Qwen3MoeFusedSparseMoeBlock(nn.Module):
         selected_experts = selected_experts.view(M * self.num_selected)
 
         # Sort selected_experts and hidden_states for better memory coalescence of weight
+        # It's possible to fuse a sort and a MoeFusedLinear layer, but for now I separate them for clarity
         selected_experts, sort_idx = torch.sort(selected_experts)
         inv_sort_idx = torch.empty_like(sort_idx)
         inv_sort_idx[sort_idx] = torch.arange(sort_idx.numel(), device=sort_idx.device, dtype=sort_idx.dtype)
