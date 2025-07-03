@@ -97,11 +97,20 @@ class Qwen3MoeFusedSparseMoeBlock(nn.Module):
         # hidden_states must be contiguous
         hidden_states = hidden_states.reshape(M * self.num_selected, hidden_dim)
         selected_experts = selected_experts.view(M * self.num_selected)
+
+        # Sort selected_experts and hidden_states for better memory coalescence of weight
+        selected_experts, sort_idx = torch.sort(selected_experts)
+        inv_sort_idx = torch.empty_like(sort_idx)
+        inv_sort_idx[sort_idx] = torch.arange(sort_idx.numel(), device=sort_idx.device, dtype=sort_idx.dtype)
+        hidden_states = hidden_states[sort_idx]
+
         gate_h = self.gate_proj(hidden_states, selected_experts)
         up_h = self.up_proj(hidden_states, selected_experts)
         hidden_states = silu_mul(gate_h, up_h)
         del gate_h, up_h
         hidden_states = self.down_proj(hidden_states, selected_experts)
+
+        hidden_states = hidden_states[inv_sort_idx]
 
         hidden_states = hidden_states.view(M, self.num_selected, hidden_dim)
         hidden_states = torch.einsum("beo,be->bo", hidden_states, routing_weights)

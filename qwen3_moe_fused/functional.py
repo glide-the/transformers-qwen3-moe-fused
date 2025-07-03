@@ -133,7 +133,9 @@ class MoeFusedLinearFunc(torch.autograd.Function):
     def forward(ctx, input, weight, selected_experts):
         ctx.save_for_backward(input, weight, selected_experts)
         if input.is_cuda:
-            return _moe_fused_linear_triton_sorted_fwd(input, weight, selected_experts)
+            # In Qwen3MoeFusedSparseMoeBlock, we do the sort outside the 3 MoeFusedLinear modules,
+            # so we don't do the sort here
+            return _moe_fused_linear_triton_fwd(input, weight, selected_experts)
         else:
             return _moe_fused_linear_torch_fwd_compiled(input, weight, selected_experts)
 
