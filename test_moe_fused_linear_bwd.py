@@ -8,6 +8,7 @@ from qwen3_moe_fused.functional import (
     _moe_fused_linear_naive_bwd,
     _moe_fused_linear_torch_bwd,
     _moe_fused_linear_torch_fwd,
+    _moe_fused_linear_triton_bwd,
 )
 
 
@@ -45,6 +46,14 @@ def main():
     print("grad_weight_torch", grad_weight_torch.shape, grad_weight_torch.dtype)
     print(torch.allclose(grad_input_torch, grad_input_auto, rtol=1e-6, atol=1e-6))
     print(torch.allclose(grad_weight_torch, grad_weight_auto, rtol=1e-6, atol=1e-6))
+
+    grad_input_triton, grad_weight_triton, _ = _moe_fused_linear_triton_bwd(
+        grad_output, input, weight, selected_experts
+    )
+    print("grad_input_triton", grad_input_triton.shape, grad_input_triton.dtype)
+    print("grad_weight_triton", grad_weight_triton.shape, grad_weight_triton.dtype)
+    print(torch.allclose(grad_input_triton, grad_input_auto, rtol=1e-6, atol=1e-6))
+    print(torch.allclose(grad_weight_triton, grad_weight_auto, rtol=1e-6, atol=1e-6))
 
 
 if __name__ == "__main__":
