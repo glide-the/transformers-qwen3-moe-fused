@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+#
+# Example to inference the fused and quantized version of Qwen3-30B-A3B
 
 from transformers import AutoTokenizer
 
@@ -10,6 +12,7 @@ def main():
     patch_bnb_quantizer()
 
     model_id = "woctordho/Qwen3-30B-A3B-fused-bnb-4bit"
+
     model = Qwen3MoeFusedForCausalLM.from_pretrained(model_id)
     tokenizer = AutoTokenizer.from_pretrained(model_id)
 

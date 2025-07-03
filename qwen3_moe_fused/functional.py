@@ -92,7 +92,7 @@ def _moe_fused_linear_torch_bwd(
     return grad_input, grad_weight, None
 
 
-# After compiling, this does not take much memory
+# After compiling, they do not take too much memory
 # no-cudagraphs is needed for autograd
 _moe_fused_linear_torch_fwd_compiled = torch.compile(
     _moe_fused_linear_torch_fwd, fullgraph=True, mode="max-autotune-no-cudagraphs"
@@ -104,6 +104,9 @@ _moe_fused_linear_torch_bwd_compiled = torch.compile(
 _moe_fused_linear_triton_fwd = index_matmul
 
 
+# If we do autograd on the compiled forward function, then the backward function will not be compiled and will still
+# take too much memory. We can compile the backward function again, but for convenience we define a custom autograd
+# function to ensure that the backward function is compiled
 class MoeFusedLinearFunc(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, weight, selected_experts):

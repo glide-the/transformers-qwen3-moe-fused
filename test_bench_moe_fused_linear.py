@@ -55,6 +55,9 @@ def benchmark(N, provider):
     # selected_experts = torch.arange(num_experts, device=device, dtype=torch.int32)
     # selected_experts = selected_experts.unsqueeze(1).expand(num_experts, N // num_experts).reshape(N)
 
+    # selected_experts = torch.randint(0, num_experts, (N,), device=device, dtype=torch.int32)
+    # selected_experts, _ = torch.sort(selected_experts)
+
     quantiles = [0.5, 0.2, 0.8]
     ms, min_ms, max_ms = triton.testing.do_bench(
         lambda: providers[provider](input, weight, selected_experts), quantiles=quantiles

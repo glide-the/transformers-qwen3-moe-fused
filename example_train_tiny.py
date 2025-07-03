@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
+#
+# Example to train a tiny model
+# Run example_create_tiny.py first
 
-import torch
+import os
+
 from datasets import Dataset
 from peft import LoraConfig, get_peft_model
-from transformers import AutoTokenizer, BitsAndBytesConfig, Qwen3MoeConfig
+from transformers import AutoTokenizer
 from trl import SFTConfig, SFTTrainer
 
 from qwen3_moe_fused.lora import LoraMoeFusedLinear
@@ -14,34 +18,16 @@ from qwen3_moe_fused.modular_qwen3_moe_fused import (
 from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
 
 
+os.environ["TRITON_PRINT_AUTOTUNING"] = "1"
+
+
 def main():
     patch_bnb_quantizer()
 
     model_dir = "./pretrained/qwen-moe-tiny-lm"
 
-    # Create a new model
-    config = Qwen3MoeConfig(
-        hidden_size=16,
-        intermediate_size=5,
-        num_hidden_layers=2,
-        num_attention_heads=8,
-        num_key_value_heads=4,
-        max_window_layers=2,
-        moe_intermediate_size=3,
-        num_experts=9,
-        norm_topk_prob=True,
-    )
-    model = Qwen3MoeFusedForCausalLM(config)
-    model.save_pretrained(model_dir)
-
-    # Load and quantize the model
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True,
-    )
-    model = Qwen3MoeFusedForCausalLM.from_pretrained(model_dir, quantization_config=bnb_config)
+    model = Qwen3MoeFusedForCausalLM.from_pretrained(model_dir)
+    tokenizer = AutoTokenizer.from_pretrained(model_dir)
 
     lora_config = LoraConfig(
         target_modules=[
@@ -72,8 +58,6 @@ def main():
     lora_config._register_custom_module({MoeFusedLinear: LoraMoeFusedLinear})
     model = get_peft_model(model, lora_config)
 
-    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-
     dataset = Dataset.from_dict(
         {
             "text": [
@@ -85,6 +69,8 @@ def main():
         }
     )
 
+    # These hyperparameters are for exaggerating the training of the tiny model
+    # Don't use them in actual training
     sft_config = SFTConfig(
         per_device_train_batch_size=2,
         gradient_accumulation_steps=1,
