@@ -6,13 +6,15 @@ import torch
 
 from qwen3_moe_fused.functional import (
     _moe_fused_linear_naive_fwd,
+    _moe_fused_linear_naive_sorted_fwd,
     _moe_fused_linear_torch_fwd,
     _moe_fused_linear_triton_fwd,
+    _moe_fused_linear_triton_sorted_fwd,
 )
 
 
 def main():
-    batch_size = 2
+    batch_size = 1024
     in_features = 3
     out_features = 5
     num_experts = 7
@@ -26,6 +28,10 @@ def main():
     output_naive = _moe_fused_linear_naive_fwd(input, weight, selected_experts)
     print("output_naive", output_naive.shape, output_naive.dtype)
 
+    output_sorted = _moe_fused_linear_naive_sorted_fwd(input, weight, selected_experts)
+    print("output_sorted", output_sorted.shape, output_sorted.dtype)
+    print(torch.allclose(output_sorted, output_naive, rtol=1e-6, atol=1e-6))
+
     output_torch = _moe_fused_linear_torch_fwd(input, weight, selected_experts)
     print("output_torch", output_torch.shape, output_torch.dtype)
     print(torch.allclose(output_torch, output_naive, rtol=1e-6, atol=1e-6))
@@ -33,6 +39,10 @@ def main():
     output_triton = _moe_fused_linear_triton_fwd(input, weight, selected_experts)
     print("output_triton", output_triton.shape, output_triton.dtype)
     print(torch.allclose(output_triton, output_naive, rtol=1e-6, atol=1e-6))
+
+    output_triton_sorted = _moe_fused_linear_triton_sorted_fwd(input, weight, selected_experts)
+    print("output_triton_sorted", output_triton_sorted.shape, output_triton_sorted.dtype)
+    print(torch.allclose(output_triton_sorted, output_naive, rtol=1e-6, atol=1e-6))
 
 
 if __name__ == "__main__":

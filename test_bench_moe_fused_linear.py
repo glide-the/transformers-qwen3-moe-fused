@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import gc
+import os
 from math import sqrt
 
 import torch
@@ -10,13 +11,17 @@ from qwen3_moe_fused.functional import (
     _moe_fused_linear_naive_fwd,
     _moe_fused_linear_torch_fwd_compiled,
     _moe_fused_linear_triton_fwd,
+    _moe_fused_linear_triton_sorted_fwd,
 )
 
+
+os.environ["TRITON_PRINT_AUTOTUNING"] = "1"
 
 providers = {
     "naive": _moe_fused_linear_naive_fwd,
     "compile": _moe_fused_linear_torch_fwd_compiled,
     "triton": _moe_fused_linear_triton_fwd,
+    "sorted": _moe_fused_linear_triton_sorted_fwd,
 }
 provider_names = list(providers)
 

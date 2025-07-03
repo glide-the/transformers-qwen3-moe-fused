@@ -88,7 +88,6 @@ class Qwen3MoeFusedSparseMoeBlock(nn.Module):
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float32)
         # routing_weights, selected_experts: (M, num_selected)
         routing_weights, selected_experts = torch.topk(routing_weights, self.num_selected, dim=-1)
-        selected_experts = selected_experts.to(torch.int32)
         if self.norm_topk_prob:  # only diff with mixtral sparse moe block!
             routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         # we cast back to the input dtype

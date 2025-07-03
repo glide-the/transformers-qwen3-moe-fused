@@ -1,6 +1,7 @@
 import torch
 
 from .kernels.index_matmul import index_matmul
+from .kernels.index_matmul_sorted import index_matmul_sorted
 
 
 def _moe_fused_linear_naive_fwd(
@@ -16,6 +17,25 @@ def _moe_fused_linear_naive_fwd(
         _weight = weight[selected_experts[b], :, :]
         _input = input[b, :]
         output[b, :] = _weight @ _input
+    return output
+
+
+# Reference implementation of index_matmul_sorted
+# Sort selected_experts for better memory coalescence of weight
+def _moe_fused_linear_naive_sorted_fwd(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    selected_experts: torch.Tensor,
+) -> torch.Tensor:
+    batch_size, in_features = input.shape
+    num_experts, out_features, _ = weight.shape
+
+    selected_experts, sort_idx = torch.sort(selected_experts)
+    output = torch.empty(batch_size, out_features, device=input.device, dtype=input.dtype)
+    for b in range(batch_size):
+        _weight = weight[selected_experts[b], :, :]
+        _input = input[sort_idx[b], :]
+        output[sort_idx[b], :] = _weight @ _input
     return output
 
 
@@ -102,6 +122,7 @@ _moe_fused_linear_torch_bwd_compiled = torch.compile(
 )
 
 _moe_fused_linear_triton_fwd = index_matmul
+_moe_fused_linear_triton_sorted_fwd = index_matmul_sorted
 
 
 # If we do autograd on the compiled forward function, then the backward function will not be compiled and will still
@@ -112,7 +133,7 @@ class MoeFusedLinearFunc(torch.autograd.Function):
     def forward(ctx, input, weight, selected_experts):
         ctx.save_for_backward(input, weight, selected_experts)
         if input.is_cuda:
-            return _moe_fused_linear_triton_fwd(input, weight, selected_experts)
+            return _moe_fused_linear_triton_sorted_fwd(input, weight, selected_experts)
         else:
             return _moe_fused_linear_torch_fwd_compiled(input, weight, selected_experts)
 

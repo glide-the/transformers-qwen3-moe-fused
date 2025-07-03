@@ -7,3 +7,7 @@ The critical part is to implement the [`moe_fused_linear`](https://github.com/wo
 output[b, o] = sum_i weight[selected_experts[b], o, i] * input[b, i]
 ```
 This is the same as `MUL_MAT_ID` in llama.cpp .
+
+We can greatly improve its performance by sorting `selected_experts` before it, which improves the memory coalescence of `weight`:
+
+![memory go brrr](https://github.com/woct0rdho/transformers-qwen3-moe-fused/blob/master/assets/moe_fused_linear.png)

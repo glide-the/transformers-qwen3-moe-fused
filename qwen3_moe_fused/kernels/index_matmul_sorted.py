@@ -1,11 +1,5 @@
-# out[b, o] = sum_i w[s[b], o, i] * x[b, i]
-# See qwen3_moe_fused/functional.py for docstring
-# Compared to moe_fused_linear_torch, this avoids allocating an intermediate array of shape (B, O, I)
-#
-# This can be improved, see:
-# https://github.com/triton-lang/triton/blob/dd1c3d429d1c24904722ac699ea5750bc694c4d6/python/triton_kernels/triton_kernels/matmul_ogs.py
-# https://github.com/ggml-org/llama.cpp/blob/a0535ffa0d35fccfec3e1a0a3bfc9dbb6054d7c0/ggml/src/ggml-cuda/ggml-cuda.cu#L2065
-# https://github.com/vllm-project/vllm/blob/015fab8c2fa4db8776f7e91abd50371911673d88/vllm/model_executor/layers/fused_moe/fused_moe.py
+# Better version of index_matmul
+# Sort s for better memory coalescence of w
 
 import torch
 import triton
@@ -30,11 +24,12 @@ import triton.language as tl
     key=["I", "O"],
 )
 @triton.jit
-def _index_matmul_kernel(
+def _index_matmul_sorted_kernel(
     # Pointers
     x_ptr,
     w_ptr,
     s_ptr,
+    sort_idx_ptr,
     out_ptr,
     # Dimensions
     I,
@@ -54,12 +49,13 @@ def _index_matmul_kernel(
 ):
     b = tl.program_id(axis=0)
     e = tl.load(s_ptr + stride_sb * b)
+    sort_idx = tl.load(sort_idx_ptr + stride_sb * b)
     blk_idx_o = tl.program_id(axis=1)
 
     offs_o = (blk_idx_o * BLOCK_SIZE_O + tl.arange(0, BLOCK_SIZE_O)) % O
     offs_i = tl.arange(0, BLOCK_SIZE_I)
     w_ptrs = w_ptr + stride_we * e + stride_wo * offs_o[:, None] + stride_wi * offs_i[None, :]
-    x_ptrs = x_ptr + stride_xb * b + stride_xi * offs_i
+    x_ptrs = x_ptr + stride_xb * sort_idx + stride_xi * offs_i
 
     accumulator = tl.zeros((BLOCK_SIZE_O,), dtype=tl.float32)
     for blk_idx_i in range(tl.cdiv(I, BLOCK_SIZE_I)):
@@ -75,12 +71,12 @@ def _index_matmul_kernel(
     accumulator = accumulator.to(out_ptr.type.element_ty)
 
     offs_o = blk_idx_o * BLOCK_SIZE_O + tl.arange(0, BLOCK_SIZE_O)
-    out_ptrs = out_ptr + stride_ob * b + stride_oo * offs_o
+    out_ptrs = out_ptr + stride_ob * sort_idx + stride_oo * offs_o
     mask_o = offs_o < O
     tl.store(out_ptrs, accumulator, mask=mask_o)
 
 
-def index_matmul(x: torch.Tensor, w: torch.Tensor, s: torch.Tensor) -> torch.Tensor:
+def index_matmul_sorted(x: torch.Tensor, w: torch.Tensor, s: torch.Tensor) -> torch.Tensor:
     assert x.is_cuda
     assert w.device == x.device
     assert s.device == x.device
@@ -96,13 +92,15 @@ def index_matmul(x: torch.Tensor, w: torch.Tensor, s: torch.Tensor) -> torch.Ten
     assert x.shape[0] == B
     assert x.shape[1] == I
 
+    s, sort_idx = torch.sort(s)
     out = torch.empty((B, O), dtype=x.dtype, device=x.device)
     grid = lambda META: (B, triton.cdiv(O, META["BLOCK_SIZE_O"]))
-    _index_matmul_kernel[grid](
+    _index_matmul_sorted_kernel[grid](
         # Pointers
         x,
         w,
         s,
+        sort_idx,
         out,
         # Dimensions
         I,
