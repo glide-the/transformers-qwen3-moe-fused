@@ -10,12 +10,17 @@ from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
 
 
 def get_rtol_atol(actual, expect):
+    actual = actual.float()
+    expect = expect.float()
     diff = (actual - expect).abs()
-    atol = diff.max()
     eps = torch.tensor(torch.finfo(actual.dtype).eps, device=actual.device, dtype=actual.dtype)
     rdiff = diff / torch.maximum(torch.maximum(actual.abs(), expect.abs()), eps)
-    rtol = rdiff.max()
-    return f"{rtol.item():.3g} {atol.item():.3g}"
+    return (
+        f"mean_rtol={rdiff.mean().item():.3g} "
+        f"max_rtol={rdiff.max().item():.3g} "
+        f"mean_atol={diff.max().item():.3g} "
+        f"max_atol={diff.max().item():.3g}"
+    )
 
 
 def main():

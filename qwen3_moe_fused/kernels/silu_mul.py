@@ -4,6 +4,7 @@ from liger_kernel.ops.swiglu import LigerSiLUMulFunction
 
 
 def silu_mul(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    if not x.is_cuda:
+    if x.is_cuda:
+        return LigerSiLUMulFunction.apply(x, y)
+    else:
         return F.silu(x) * y
-    return LigerSiLUMulFunction.apply(x, y)

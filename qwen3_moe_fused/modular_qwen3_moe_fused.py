@@ -94,7 +94,7 @@ class Qwen3MoeFusedSparseMoeBlock(nn.Module):
         # we cast back to the input dtype
         routing_weights = routing_weights.to(hidden_states.dtype)
 
-        hidden_states = hidden_states.unsqueeze(1).broadcast_to(M, self.num_selected, hidden_dim)
+        hidden_states = hidden_states.unsqueeze(1).expand(M, self.num_selected, hidden_dim)
         # hidden_states must be contiguous
         hidden_states = hidden_states.reshape(M * self.num_selected, hidden_dim)
         selected_experts = selected_experts.view(M * self.num_selected)

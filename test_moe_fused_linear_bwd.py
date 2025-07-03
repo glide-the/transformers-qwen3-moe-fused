@@ -5,9 +5,9 @@ from math import sqrt
 import torch
 
 from qwen3_moe_fused.functional import (
-    moe_fused_linear_naive_bwd,
-    moe_fused_linear_torch,
-    moe_fused_linear_torch_bwd,
+    _moe_fused_linear_naive_bwd,
+    _moe_fused_linear_torch_bwd,
+    _moe_fused_linear_torch_fwd,
 )
 
 
@@ -25,7 +25,7 @@ def main():
 
     input_auto = input.clone().requires_grad_()
     weight_auto = weight.clone().requires_grad_()
-    output_auto = moe_fused_linear_torch(input_auto, weight_auto, selected_experts)
+    output_auto = _moe_fused_linear_torch_fwd(input_auto, weight_auto, selected_experts)
 
     grad_output = torch.randn(batch_size, out_features, device=device, dtype=dtype)
     output_auto.backward(gradient=grad_output)
@@ -34,17 +34,17 @@ def main():
     print("grad_input_auto", grad_input_auto.shape, grad_input_auto.dtype)
     print("grad_weight_auto", grad_weight_auto.shape, grad_weight_auto.dtype)
 
-    grad_input_naive, grad_weight_naive, _ = moe_fused_linear_naive_bwd(grad_output, input, weight, selected_experts)
+    grad_input_naive, grad_weight_naive, _ = _moe_fused_linear_naive_bwd(grad_output, input, weight, selected_experts)
     print("grad_input_naive", grad_input_naive.shape, grad_input_naive.dtype)
     print("grad_weight_naive", grad_weight_naive.shape, grad_weight_naive.dtype)
     print(torch.allclose(grad_input_naive, grad_input_auto, rtol=1e-6, atol=1e-6))
     print(torch.allclose(grad_weight_naive, grad_weight_auto, rtol=1e-6, atol=1e-6))
 
-    grad_input_manual, grad_weight_manual, _ = moe_fused_linear_torch_bwd(grad_output, input, weight, selected_experts)
-    print("grad_input_manual", grad_input_manual.shape, grad_input_manual.dtype)
-    print("grad_weight_manual", grad_weight_manual.shape, grad_weight_manual.dtype)
-    print(torch.allclose(grad_input_manual, grad_input_auto, rtol=1e-6, atol=1e-6))
-    print(torch.allclose(grad_weight_manual, grad_weight_auto, rtol=1e-6, atol=1e-6))
+    grad_input_torch, grad_weight_torch, _ = _moe_fused_linear_torch_bwd(grad_output, input, weight, selected_experts)
+    print("grad_input_torch", grad_input_torch.shape, grad_input_torch.dtype)
+    print("grad_weight_torch", grad_weight_torch.shape, grad_weight_torch.dtype)
+    print(torch.allclose(grad_input_torch, grad_input_auto, rtol=1e-6, atol=1e-6))
+    print(torch.allclose(grad_weight_torch, grad_weight_auto, rtol=1e-6, atol=1e-6))
 
 
 if __name__ == "__main__":
