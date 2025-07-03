@@ -29,7 +29,7 @@ provider_names = list(providers)
             line_arg="provider",
             line_vals=provider_names,
             line_names=provider_names,
-            ylabel="GB/s",
+            ylabel="GFLOPS",
             plot_name="moe_fused_linear",
             args={},
         )
@@ -55,8 +55,6 @@ def benchmark(N, provider):
     # selected_experts = torch.arange(num_experts, device=device, dtype=torch.int32)
     # selected_experts = selected_experts.unsqueeze(1).expand(num_experts, N // num_experts).reshape(N)
 
-    arg_bytes = sum([x.numel() + x.element_size() for x in [input, weight, selected_experts]])
-
     quantiles = [0.5, 0.2, 0.8]
     ms, min_ms, max_ms = triton.testing.do_bench(
         lambda: providers[provider](input, weight, selected_experts), quantiles=quantiles
@@ -66,8 +64,8 @@ def benchmark(N, provider):
     gc.collect()
     torch.cuda.empty_cache()
 
-    gbps = lambda ms: arg_bytes / ms * 1e-6
-    return gbps(ms), gbps(max_ms), gbps(min_ms)
+    perf = lambda ms: N * out_features * in_features / ms * 1e-6
+    return perf(ms), perf(max_ms), perf(min_ms)
 
 
 if __name__ == "__main__":
