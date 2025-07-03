@@ -10,6 +10,23 @@ import triton
 import triton.language as tl
 
 
+@triton.autotune(
+    configs=[
+        triton.Config({"BLOCK_SIZE_I": 64, "BLOCK_SIZE_O": 64}, num_warps=4, num_stages=2),
+        triton.Config({"BLOCK_SIZE_I": 64, "BLOCK_SIZE_O": 64}, num_warps=4, num_stages=3),
+        triton.Config({"BLOCK_SIZE_I": 64, "BLOCK_SIZE_O": 64}, num_warps=8, num_stages=2),
+        triton.Config({"BLOCK_SIZE_I": 64, "BLOCK_SIZE_O": 64}, num_warps=8, num_stages=3),
+        triton.Config({"BLOCK_SIZE_I": 64, "BLOCK_SIZE_O": 128}, num_warps=4, num_stages=2),
+        triton.Config({"BLOCK_SIZE_I": 64, "BLOCK_SIZE_O": 128}, num_warps=4, num_stages=3),
+        triton.Config({"BLOCK_SIZE_I": 64, "BLOCK_SIZE_O": 128}, num_warps=8, num_stages=2),
+        triton.Config({"BLOCK_SIZE_I": 64, "BLOCK_SIZE_O": 128}, num_warps=8, num_stages=3),
+        triton.Config({"BLOCK_SIZE_I": 128, "BLOCK_SIZE_O": 64}, num_warps=4, num_stages=2),
+        triton.Config({"BLOCK_SIZE_I": 128, "BLOCK_SIZE_O": 64}, num_warps=4, num_stages=3),
+        triton.Config({"BLOCK_SIZE_I": 128, "BLOCK_SIZE_O": 64}, num_warps=8, num_stages=2),
+        triton.Config({"BLOCK_SIZE_I": 128, "BLOCK_SIZE_O": 64}, num_warps=8, num_stages=3),
+    ],
+    key=["I", "O"],
+)
 @triton.jit
 def dot_kernel(
     # Pointers
@@ -30,8 +47,8 @@ def dot_kernel(
     stride_ob,
     stride_oo,
     # Metadata
-    BLOCK_SIZE_I: tl.constexpr = 64,
-    BLOCK_SIZE_O: tl.constexpr = 64,
+    BLOCK_SIZE_I: tl.constexpr,
+    BLOCK_SIZE_O: tl.constexpr,
 ):
     b = tl.program_id(axis=0)
     e = tl.load(s_ptr + stride_sb * b)
