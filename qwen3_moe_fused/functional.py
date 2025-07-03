@@ -93,4 +93,5 @@ def moe_fused_linear_torch_bwd(
 
 
 moe_fused_linear_triton = index_matmul
-moe_fused_linear = moe_fused_linear_triton
+
+moe_fused_linear = torch.compile(moe_fused_linear_torch, fullgraph=True, mode="max-autotune")
