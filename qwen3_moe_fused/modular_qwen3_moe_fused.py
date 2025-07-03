@@ -83,11 +83,12 @@ class Qwen3MoeFusedSparseMoeBlock(nn.Module):
         router_logits = self.gate(hidden_states)
 
         # TODO: Fuse softmax and topk
-        # See https://huggingface.co/kernels-community/moe/blob/main/moe/topk_softmax_kernels.cu
-        # But a Triton kernel will be easier to install
+        # See https://github.com/triton-lang/triton/blob/0b1cf48fff3fb7a7d884005d7a8f61b56c4cfd3b/main/python/triton_kernels/triton_kernels/routing.py
+        # https://huggingface.co/kernels-community/moe/blob/main/moe/topk_softmax_kernels.cu
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float32)
         # routing_weights, selected_experts: (M, num_selected)
         routing_weights, selected_experts = torch.topk(routing_weights, self.num_selected, dim=-1)
+        selected_experts = selected_experts.to(torch.int32)
         if self.norm_topk_prob:  # only diff with mixtral sparse moe block!
             routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         # we cast back to the input dtype

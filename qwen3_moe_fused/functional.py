@@ -1,5 +1,7 @@
 import torch
 
+from .kernels.index_matmul import index_matmul
+
 
 def moe_fused_linear_naive(
     input: torch.Tensor,
@@ -17,10 +19,6 @@ def moe_fused_linear_naive(
     return output
 
 
-# TODO: Write a Triton kernel to avoid allocating an array of shape (b, o, i)
-# See https://github.com/triton-lang/triton/blob/dd1c3d429d1c24904722ac699ea5750bc694c4d6/python/triton_kernels/triton_kernels/matmul_ogs.py
-# https://github.com/ggml-org/llama.cpp/blob/a0535ffa0d35fccfec3e1a0a3bfc9dbb6054d7c0/ggml/src/ggml-cuda/ggml-cuda.cu#L2065
-# https://github.com/vllm-project/vllm/blob/015fab8c2fa4db8776f7e91abd50371911673d88/vllm/model_executor/layers/fused_moe/fused_moe.py
 def moe_fused_linear_torch(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -49,28 +47,5 @@ def moe_fused_linear_torch(
     return output
 
 
-moe_fused_linear = moe_fused_linear_torch
-
-
-def _test():
-    from math import sqrt
-
-    batch_size = 2
-    in_features = 3
-    out_features = 5
-    num_experts = 7
-    device = "cuda"
-    dtype = torch.float32
-
-    input = torch.randn(batch_size, in_features, device=device, dtype=dtype)
-    weight = 1 / sqrt(in_features) * torch.randn(num_experts, out_features, in_features, device=device, dtype=dtype)
-    selected_experts = torch.randint(0, num_experts, (batch_size,), device=device, dtype=torch.int32)
-
-    output_naive = moe_fused_linear_naive(input, weight, selected_experts)
-
-    output_torch = moe_fused_linear_torch(input, weight, selected_experts)
-    print(torch.allclose(output_torch, output_naive, rtol=1e-6, atol=1e-6))
-
-
-if __name__ == "__main__":
-    _test()
+moe_fused_linear_triton = index_matmul
+moe_fused_linear = moe_fused_linear_triton
