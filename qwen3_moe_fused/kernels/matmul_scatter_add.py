@@ -8,6 +8,27 @@ import triton
 import triton.language as tl
 
 
+@triton.autotune(
+    configs=[
+        triton.Config({"BLOCK_SIZE_B": 16, "BLOCK_SIZE_I": 64, "BLOCK_SIZE_O": 64}, num_warps=4, num_stages=2),
+        triton.Config({"BLOCK_SIZE_B": 16, "BLOCK_SIZE_I": 64, "BLOCK_SIZE_O": 64}, num_warps=4, num_stages=3),
+        triton.Config({"BLOCK_SIZE_B": 16, "BLOCK_SIZE_I": 64, "BLOCK_SIZE_O": 64}, num_warps=8, num_stages=2),
+        triton.Config({"BLOCK_SIZE_B": 16, "BLOCK_SIZE_I": 64, "BLOCK_SIZE_O": 64}, num_warps=8, num_stages=3),
+        triton.Config({"BLOCK_SIZE_B": 16, "BLOCK_SIZE_I": 128, "BLOCK_SIZE_O": 128}, num_warps=4, num_stages=2),
+        triton.Config({"BLOCK_SIZE_B": 16, "BLOCK_SIZE_I": 128, "BLOCK_SIZE_O": 128}, num_warps=4, num_stages=3),
+        triton.Config({"BLOCK_SIZE_B": 16, "BLOCK_SIZE_I": 128, "BLOCK_SIZE_O": 128}, num_warps=8, num_stages=2),
+        triton.Config({"BLOCK_SIZE_B": 16, "BLOCK_SIZE_I": 128, "BLOCK_SIZE_O": 128}, num_warps=8, num_stages=3),
+        triton.Config({"BLOCK_SIZE_B": 32, "BLOCK_SIZE_I": 64, "BLOCK_SIZE_O": 64}, num_warps=4, num_stages=2),
+        triton.Config({"BLOCK_SIZE_B": 32, "BLOCK_SIZE_I": 64, "BLOCK_SIZE_O": 64}, num_warps=4, num_stages=3),
+        triton.Config({"BLOCK_SIZE_B": 32, "BLOCK_SIZE_I": 64, "BLOCK_SIZE_O": 64}, num_warps=8, num_stages=2),
+        triton.Config({"BLOCK_SIZE_B": 32, "BLOCK_SIZE_I": 64, "BLOCK_SIZE_O": 64}, num_warps=8, num_stages=3),
+        triton.Config({"BLOCK_SIZE_B": 32, "BLOCK_SIZE_I": 128, "BLOCK_SIZE_O": 128}, num_warps=4, num_stages=2),
+        triton.Config({"BLOCK_SIZE_B": 32, "BLOCK_SIZE_I": 128, "BLOCK_SIZE_O": 128}, num_warps=4, num_stages=3),
+        triton.Config({"BLOCK_SIZE_B": 32, "BLOCK_SIZE_I": 128, "BLOCK_SIZE_O": 128}, num_warps=8, num_stages=2),
+        triton.Config({"BLOCK_SIZE_B": 32, "BLOCK_SIZE_I": 128, "BLOCK_SIZE_O": 128}, num_warps=8, num_stages=3),
+    ],
+    key=["I", "O"],
+)
 @triton.jit
 def _matmul_scatter_add_kernel(
     # Pointers
@@ -29,9 +50,9 @@ def _matmul_scatter_add_kernel(
     stride_oo,
     stride_oi,
     # Metadata
-    BLOCK_SIZE_B: tl.constexpr = 64,
-    BLOCK_SIZE_I: tl.constexpr = 64,
-    BLOCK_SIZE_O: tl.constexpr = 64,
+    BLOCK_SIZE_B: tl.constexpr,
+    BLOCK_SIZE_I: tl.constexpr,
+    BLOCK_SIZE_O: tl.constexpr,
 ) -> None:
     e = tl.program_id(axis=0)
     b_begin = tl.load(s_begins_ends_ptr + stride_se * e)

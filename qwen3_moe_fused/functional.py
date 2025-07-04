@@ -116,9 +116,9 @@ def _moe_fused_linear_torch_bwd(
     return grad_input, grad_weight, None
 
 
-# After compiling, they do not take too much memory
+# torch.compile can optimize away weight_selected in fwd, so it no longer takes too much memory
+# But it cannot yet optimize away grad_weight_selected in bwd
 # no-cudagraphs is needed for autograd
-# However, they may still take too much memory when compiling
 _moe_fused_linear_torch_fwd_compiled = torch.compile(
     _moe_fused_linear_torch_fwd, fullgraph=True, mode="max-autotune-no-cudagraphs"
 )
