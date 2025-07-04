@@ -1,10 +1,12 @@
 import torch
 
+from .grouped_gemm.interface import grouped_gemm
 from .kernels.index_matmul import index_matmul
 from .kernels.index_matmul_batched import index_matmul_batched
 from .kernels.index_matmul_sorted import index_matmul_sorted
 from .kernels.index_matmul_transposed import index_matmul_transposed
 from .kernels.matmul_scatter_add import matmul_scatter_add
+from .kernels.utils import get_routing_indices
 
 
 # Reference implementation of index_matmul
@@ -133,7 +135,11 @@ _moe_fused_linear_torch_bwd_weight_compiled = torch.compile(
 )
 
 _moe_fused_linear_triton_fwd = index_matmul
+
+# Sort selected_experts before matmul
 _moe_fused_linear_triton_sorted_fwd = index_matmul_sorted
+
+# Assume selected_experts is sorted
 _moe_fused_linear_triton_batched_fwd = index_matmul_batched
 
 
@@ -148,6 +154,22 @@ def _moe_fused_linear_triton_bwd_weight(
     grad_output: torch.Tensor, input: torch.Tensor, weight: torch.Tensor, selected_experts: torch.Tensor
 ) -> torch.Tensor:
     return matmul_scatter_add(input, grad_output, selected_experts, weight.shape[0], weight.dtype)
+
+
+def _moe_fused_linear_grouped_gemm_fwd(
+    input: torch.Tensor, weight: torch.Tensor, selected_experts: torch.Tensor
+) -> torch.Tensor:
+    batch_size, in_features = input.shape
+    num_experts, out_features, _ = weight.shape
+
+    token_counts_by_expert = get_routing_indices(selected_experts, num_experts)
+    return grouped_gemm(
+        X=input,
+        W=weight,
+        m_sizes=token_counts_by_expert,
+        topk=1,  # Not used
+        autotune=True,
+    )
 
 
 # If we do autograd on the compiled forward function, then the backward function will not be compiled and will still

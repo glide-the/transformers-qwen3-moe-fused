@@ -65,7 +65,7 @@ def _index_matmul_batched_kernel(
 
         accumulator = tl.dot(_x, _w.T, accumulator)
         # For testing with float32, use:
-        # accumulator = tl.dot( _x,_w.T, accumulator, input_precision="ieee")
+        # accumulator = tl.dot(_x, _w.T, accumulator, input_precision="ieee")
 
         offs_i += BLOCK_SIZE_I
         w_ptrs += stride_wi * BLOCK_SIZE_I

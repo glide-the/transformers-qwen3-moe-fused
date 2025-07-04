@@ -8,6 +8,7 @@ import torch
 import triton
 
 from qwen3_moe_fused.functional import (
+    _moe_fused_linear_grouped_gemm_fwd,
     _moe_fused_linear_naive_fwd,
     _moe_fused_linear_torch_fwd_compiled,
     _moe_fused_linear_triton_batched_fwd,
@@ -24,6 +25,7 @@ providers = {
     "triton": _moe_fused_linear_triton_fwd,
     # "sorted": _moe_fused_linear_triton_sorted_fwd,
     # "batched": _moe_fused_linear_triton_batched_fwd,
+    "grouped_gemm": _moe_fused_linear_grouped_gemm_fwd,
 }
 provider_names = list(providers)
 
