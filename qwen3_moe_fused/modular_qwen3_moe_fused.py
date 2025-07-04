@@ -82,8 +82,8 @@ class Qwen3MoeFusedSparseMoeBlock(nn.Module):
         # router_logits: (M, num_experts)
         router_logits = self.gate(hidden_states)
 
-        # TODO: Fuse softmax and topk
-        # See https://github.com/triton-lang/triton/blob/0b1cf48fff3fb7a7d884005d7a8f61b56c4cfd3b/main/python/triton_kernels/triton_kernels/routing.py
+        # TODO: Fuse softmax and topk, see:
+        # https://github.com/triton-lang/triton/blob/0b1cf48fff3fb7a7d884005d7a8f61b56c4cfd3b/main/python/triton_kernels/triton_kernels/routing.py
         # https://huggingface.co/kernels-community/moe/blob/main/moe/topk_softmax_kernels.cu
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float32)
         # routing_weights, selected_experts: (M, num_selected)
@@ -99,12 +99,13 @@ class Qwen3MoeFusedSparseMoeBlock(nn.Module):
         selected_experts = selected_experts.view(M * self.num_selected)
 
         # Sort selected_experts and hidden_states for better memory coalescence of weight
-        # It's possible to fuse a sort and a MoeFusedLinear layer, but for now I separate them for clarity
+        # It's possible to fuse a sort and a MoeFusedLinear layer, but for now we separate them for clarity
         selected_experts, sort_idx = torch.sort(selected_experts)
         inv_sort_idx = torch.empty_like(sort_idx)
         inv_sort_idx[sort_idx] = torch.arange(sort_idx.numel(), device=sort_idx.device, dtype=sort_idx.dtype)
         hidden_states = hidden_states[sort_idx]
 
+        # It's possible to fuse gate_h and up_h, but this affects the shape of LoRA
         gate_h = self.gate_proj(hidden_states, selected_experts)
         up_h = self.up_proj(hidden_states, selected_experts)
         hidden_states = silu_mul(gate_h, up_h)

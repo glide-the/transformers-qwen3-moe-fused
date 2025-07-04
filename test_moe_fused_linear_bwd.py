@@ -13,16 +13,17 @@ from qwen3_moe_fused.functional import (
 
 
 def main():
-    batch_size = 2
+    batch_size = 1024
     in_features = 3
     out_features = 5
-    num_experts = 7
+    num_experts = 128
     device = "cuda"
     dtype = torch.float32
 
     input = torch.randn(batch_size, in_features, device=device, dtype=dtype)
     weight = 1 / sqrt(in_features) * torch.randn(num_experts, out_features, in_features, device=device, dtype=dtype)
     selected_experts = torch.randint(0, num_experts, (batch_size,), device=device, dtype=torch.int32)
+    selected_experts, _ = torch.sort(selected_experts)
 
     input_auto = input.clone().requires_grad_()
     weight_auto = weight.clone().requires_grad_()

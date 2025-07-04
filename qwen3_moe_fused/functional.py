@@ -3,6 +3,7 @@ import torch
 from .kernels.index_matmul import index_matmul
 from .kernels.index_matmul_sorted import index_matmul_sorted
 from .kernels.index_matmul_transposed import index_matmul_transposed
+from .kernels.matmul_scatter_add import matmul_scatter_add
 
 
 # Reference implementation of index_matmul
@@ -106,8 +107,7 @@ def _moe_fused_linear_torch_bwd(
     weight_selected = weight[selected_experts]
     grad_input = torch.einsum("bo,boi->bi", grad_output, weight_selected).to(input.dtype)
 
-    # for b in range(batch_size):
-    #     grad_weight[selected_experts[b], o, i] += grad_output[b, o] * input[b, i]
+    # grad_weight[e, o, i] = sum_b if(selected_experts[b] == e) grad_output[b, o] * input[b, i]
     grad_weight_selected = torch.einsum("bo,bi->boi", grad_output, input).to(weight.dtype)
     idx = selected_experts.to(torch.int64).view(batch_size, 1, 1).expand(-1, out_features, in_features)
     grad_weight = torch.zeros_like(weight)
@@ -118,7 +118,7 @@ def _moe_fused_linear_torch_bwd(
 
 # After compiling, they do not take too much memory
 # no-cudagraphs is needed for autograd
-# However, they still take too much memory when compiling
+# However, they may still take too much memory when compiling
 _moe_fused_linear_torch_fwd_compiled = torch.compile(
     _moe_fused_linear_torch_fwd, fullgraph=True, mode="max-autotune-no-cudagraphs"
 )
@@ -130,25 +130,16 @@ _moe_fused_linear_triton_fwd = index_matmul
 _moe_fused_linear_triton_sorted_fwd = index_matmul_sorted
 
 
+# Assume selected_experts is sorted
 def _moe_fused_linear_triton_bwd(
     grad_output: torch.Tensor,
     input: torch.Tensor,
     weight: torch.Tensor,
     selected_experts: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor, None]:
-    batch_size, in_features = input.shape
-    num_experts, out_features, _ = weight.shape
-
+    num_experts = weight.shape[0]
     grad_input = index_matmul_transposed(grad_output, weight, selected_experts)
-
-    # for b in range(batch_size):
-    #     grad_weight[selected_experts[b], o, i] += grad_output[b, o] * input[b, i]
-    # TODO
-    grad_weight_selected = torch.einsum("bo,bi->boi", grad_output, input).to(weight.dtype)
-    idx = selected_experts.to(torch.int64).view(batch_size, 1, 1).expand(-1, out_features, in_features)
-    grad_weight = torch.zeros_like(weight)
-    grad_weight.scatter_add_(0, idx, grad_weight_selected)
-
+    grad_weight = matmul_scatter_add(input, grad_output, selected_experts, num_experts, weight.dtype)
     return grad_input, grad_weight, None
 
 

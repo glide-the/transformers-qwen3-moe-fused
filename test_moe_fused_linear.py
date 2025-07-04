@@ -17,7 +17,7 @@ def main():
     batch_size = 1024
     in_features = 3
     out_features = 5
-    num_experts = 7
+    num_experts = 128
     device = "cuda"
     dtype = torch.float32
 
