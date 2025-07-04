@@ -8,9 +8,7 @@ from .kernels.matmul_scatter_add import matmul_scatter_add
 
 # Reference implementation of index_matmul
 def _moe_fused_linear_naive_fwd(
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    selected_experts: torch.Tensor,
+    input: torch.Tensor, weight: torch.Tensor, selected_experts: torch.Tensor
 ) -> torch.Tensor:
     """
     Computes a MoE linear operation using vectorized operations.
@@ -41,9 +39,7 @@ def _moe_fused_linear_naive_fwd(
 # Reference implementation of index_matmul_sorted
 # Sort selected_experts for better memory coalescence of weight
 def _moe_fused_linear_naive_sorted_fwd(
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    selected_experts: torch.Tensor,
+    input: torch.Tensor, weight: torch.Tensor, selected_experts: torch.Tensor
 ) -> torch.Tensor:
     batch_size, in_features = input.shape
     num_experts, out_features, _ = weight.shape
@@ -57,12 +53,9 @@ def _moe_fused_linear_naive_sorted_fwd(
     return output
 
 
-def _moe_fused_linear_naive_bwd(
-    grad_output: torch.Tensor,
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    selected_experts: torch.Tensor,
-) -> tuple[torch.Tensor, torch.Tensor, None]:
+def _moe_fused_linear_naive_bwd_input(
+    grad_output: torch.Tensor, input: torch.Tensor, weight: torch.Tensor, selected_experts: torch.Tensor
+) -> torch.Tensor:
     batch_size, in_features = input.shape
     num_experts, out_features, _ = weight.shape
 
@@ -71,20 +64,25 @@ def _moe_fused_linear_naive_bwd(
         _weight = weight[selected_experts[b], :, :]
         _grad_output = grad_output[b, :]
         grad_input[b, :] = _grad_output @ _weight
+    return grad_input
+
+
+def _moe_fused_linear_naive_bwd_weight(
+    grad_output: torch.Tensor, input: torch.Tensor, weight: torch.Tensor, selected_experts: torch.Tensor
+) -> torch.Tensor:
+    batch_size, in_features = input.shape
+    num_experts, out_features, _ = weight.shape
 
     grad_weight = torch.zeros_like(weight)
     for b in range(batch_size):
         grad_weight[selected_experts[b], :, :] += grad_output[b, :, None] * input[b, None, :]
-
-    return grad_input, grad_weight, None
+    return grad_weight
 
 
 # Vectorized version of _moe_fused_linear_naive_fwd,
 # but it allocates weight_selected (batch_size, out_features, in_features) and takes too much memory
 def _moe_fused_linear_torch_fwd(
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    selected_experts: torch.Tensor,
+    input: torch.Tensor, weight: torch.Tensor, selected_experts: torch.Tensor
 ) -> torch.Tensor:
     batch_size, in_features = input.shape
     num_experts, out_features, _ = weight.shape
@@ -94,53 +92,60 @@ def _moe_fused_linear_torch_fwd(
     return output
 
 
-def _moe_fused_linear_torch_bwd(
-    grad_output: torch.Tensor,
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    selected_experts: torch.Tensor,
-) -> tuple[torch.Tensor, torch.Tensor, None]:
+def _moe_fused_linear_torch_bwd_input(
+    grad_output: torch.Tensor, input: torch.Tensor, weight: torch.Tensor, selected_experts: torch.Tensor
+) -> torch.Tensor:
     batch_size, in_features = input.shape
     num_experts, out_features, _ = weight.shape
 
     # grad_input[b, i] = sum_o weight[selected_experts[b], o, i] * grad_output[b, o]
     weight_selected = weight[selected_experts]
     grad_input = torch.einsum("bo,boi->bi", grad_output, weight_selected).to(input.dtype)
+    return grad_input
+
+
+def _moe_fused_linear_torch_bwd_weight(
+    grad_output: torch.Tensor, input: torch.Tensor, weight: torch.Tensor, selected_experts: torch.Tensor
+) -> torch.Tensor:
+    batch_size, in_features = input.shape
+    num_experts, out_features, _ = weight.shape
 
     # grad_weight[e, o, i] = sum_b if(selected_experts[b] == e) grad_output[b, o] * input[b, i]
     grad_weight_selected = torch.einsum("bo,bi->boi", grad_output, input).to(weight.dtype)
     idx = selected_experts.to(torch.int64).view(batch_size, 1, 1).expand(-1, out_features, in_features)
     grad_weight = torch.zeros_like(weight)
     grad_weight.scatter_add_(0, idx, grad_weight_selected)
-
-    return grad_input, grad_weight, None
+    return grad_weight
 
 
 # torch.compile can optimize away weight_selected in fwd, so it no longer takes too much memory
-# But it cannot yet optimize away grad_weight_selected in bwd
+# But it cannot yet optimize away grad_weight_selected in bwd_weight
 # no-cudagraphs is needed for autograd
 _moe_fused_linear_torch_fwd_compiled = torch.compile(
     _moe_fused_linear_torch_fwd, fullgraph=True, mode="max-autotune-no-cudagraphs"
 )
-_moe_fused_linear_torch_bwd_compiled = torch.compile(
-    _moe_fused_linear_torch_bwd, fullgraph=True, mode="max-autotune-no-cudagraphs"
+_moe_fused_linear_torch_bwd_input_compiled = torch.compile(
+    _moe_fused_linear_torch_bwd_input, fullgraph=True, mode="max-autotune-no-cudagraphs"
+)
+_moe_fused_linear_torch_bwd_weight_compiled = torch.compile(
+    _moe_fused_linear_torch_bwd_weight, fullgraph=True, mode="max-autotune-no-cudagraphs"
 )
 
 _moe_fused_linear_triton_fwd = index_matmul
 _moe_fused_linear_triton_sorted_fwd = index_matmul_sorted
 
 
+def _moe_fused_linear_triton_bwd_input(
+    grad_output: torch.Tensor, input: torch.Tensor, weight: torch.Tensor, selected_experts: torch.Tensor
+) -> torch.Tensor:
+    return index_matmul_transposed(grad_output, weight, selected_experts, input.dtype)
+
+
 # Assume selected_experts is sorted
-def _moe_fused_linear_triton_bwd(
-    grad_output: torch.Tensor,
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    selected_experts: torch.Tensor,
-) -> tuple[torch.Tensor, torch.Tensor, None]:
-    num_experts = weight.shape[0]
-    grad_input = index_matmul_transposed(grad_output, weight, selected_experts)
-    grad_weight = matmul_scatter_add(input, grad_output, selected_experts, num_experts, weight.dtype)
-    return grad_input, grad_weight, None
+def _moe_fused_linear_triton_bwd_weight(
+    grad_output: torch.Tensor, input: torch.Tensor, weight: torch.Tensor, selected_experts: torch.Tensor
+) -> torch.Tensor:
+    return matmul_scatter_add(input, grad_output, selected_experts, weight.shape[0], weight.dtype)
 
 
 # If we do autograd on the compiled forward function, then the backward function will not be compiled and will still
@@ -161,9 +166,12 @@ class MoeFusedLinearFunc(torch.autograd.Function):
     def backward(ctx, grad_output):
         input, weight, selected_experts = ctx.saved_tensors
         if input.is_cuda:
-            return _moe_fused_linear_triton_bwd(grad_output, input, weight, selected_experts)
+            grad_input = _moe_fused_linear_triton_bwd_input(grad_output, input, weight, selected_experts)
+            grad_weight = _moe_fused_linear_triton_bwd_weight(grad_output, input, weight, selected_experts)
         else:
-            return _moe_fused_linear_torch_bwd_compiled(grad_output, input, weight, selected_experts)
+            grad_input = _moe_fused_linear_torch_bwd_input_compiled(grad_output, input, weight, selected_experts)
+            grad_weight = _moe_fused_linear_torch_bwd_weight_compiled(grad_output, input, weight, selected_experts)
+        return grad_input, grad_weight, None
 
 
 moe_fused_linear = MoeFusedLinearFunc.apply

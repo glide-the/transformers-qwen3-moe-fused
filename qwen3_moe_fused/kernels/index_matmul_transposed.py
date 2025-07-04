@@ -1,5 +1,7 @@
 # out[b, o] = sum_i w[s[b], i, o] * x[b, i]
 
+from typing import Optional
+
 import torch
 import triton
 import triton.language as tl
@@ -73,7 +75,9 @@ def _index_matmul_transposed_kernel(
     tl.store(out_ptrs, accumulator, mask=mask_o)
 
 
-def index_matmul_transposed(x: torch.Tensor, w: torch.Tensor, s: torch.Tensor) -> torch.Tensor:
+def index_matmul_transposed(
+    x: torch.Tensor, w: torch.Tensor, s: torch.Tensor, dtype: Optional[torch.dtype] = None
+) -> torch.Tensor:
     assert x.is_cuda
     assert w.device == x.device
     assert s.device == x.device
@@ -89,8 +93,13 @@ def index_matmul_transposed(x: torch.Tensor, w: torch.Tensor, s: torch.Tensor) -
     assert x.shape[0] == B
     assert x.shape[1] == I
 
-    out = torch.empty((B, O), dtype=x.dtype, device=x.device)
-    grid = lambda META: (B, triton.cdiv(O, META["BLOCK_SIZE_O"]))
+    if dtype is None:
+        dtype = x.dtype
+    out = torch.empty((B, O), device=x.device, dtype=dtype)
+    grid = lambda META: (
+        B,
+        triton.cdiv(O, META["BLOCK_SIZE_O"]),
+    )
     _index_matmul_transposed_kernel[grid](
         # Pointers
         x,

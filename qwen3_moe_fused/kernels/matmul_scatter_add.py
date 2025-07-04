@@ -125,7 +125,7 @@ def matmul_scatter_add(x: torch.Tensor, y: torch.Tensor, s: torch.Tensor, E: int
     # but for now we recompute it for clarity
     s_begins_ends = _compute_batch_begins_ends(s, E)
 
-    out = torch.zeros((E, O, I), dtype=dtype, device=x.device)
+    out = torch.zeros((E, O, I), device=x.device, dtype=dtype)
     grid = lambda META: (
         E,
         triton.cdiv(O, META["BLOCK_SIZE_O"]),

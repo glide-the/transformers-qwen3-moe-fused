@@ -8,6 +8,8 @@
 # https://github.com/ggml-org/llama.cpp/blob/a0535ffa0d35fccfec3e1a0a3bfc9dbb6054d7c0/ggml/src/ggml-cuda/ggml-cuda.cu#L2065
 # https://github.com/vllm-project/vllm/blob/015fab8c2fa4db8776f7e91abd50371911673d88/vllm/model_executor/layers/fused_moe/fused_moe.py
 
+from typing import Optional
+
 import torch
 import triton
 import triton.language as tl
@@ -81,7 +83,9 @@ def _index_matmul_kernel(
     tl.store(out_ptrs, accumulator, mask=mask_o)
 
 
-def index_matmul(x: torch.Tensor, w: torch.Tensor, s: torch.Tensor) -> torch.Tensor:
+def index_matmul(
+    x: torch.Tensor, w: torch.Tensor, s: torch.Tensor, dtype: Optional[torch.dtype] = None
+) -> torch.Tensor:
     assert x.is_cuda
     assert w.device == x.device
     assert s.device == x.device
@@ -97,8 +101,13 @@ def index_matmul(x: torch.Tensor, w: torch.Tensor, s: torch.Tensor) -> torch.Ten
     assert x.shape[0] == B
     assert x.shape[1] == I
 
-    out = torch.empty((B, O), dtype=x.dtype, device=x.device)
-    grid = lambda META: (B, triton.cdiv(O, META["BLOCK_SIZE_O"]))
+    if dtype is None:
+        dtype = x.dtype
+    out = torch.empty((B, O), device=x.device, dtype=dtype)
+    grid = lambda META: (
+        B,
+        triton.cdiv(O, META["BLOCK_SIZE_O"]),
+    )
     _index_matmul_kernel[grid](
         # Pointers
         x,

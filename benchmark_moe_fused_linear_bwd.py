@@ -8,18 +8,18 @@ import torch
 import triton
 
 from qwen3_moe_fused.functional import (
-    _moe_fused_linear_naive_bwd,
-    _moe_fused_linear_torch_bwd_compiled,
-    _moe_fused_linear_triton_bwd,
+    _moe_fused_linear_naive_bwd_weight,
+    _moe_fused_linear_torch_bwd_weight_compiled,
+    _moe_fused_linear_triton_bwd_weight,
 )
 
 
 os.environ["TRITON_PRINT_AUTOTUNING"] = "1"
 
 providers = {
-    "naive": _moe_fused_linear_naive_bwd,
-    # "compile": _moe_fused_linear_torch_bwd_compiled,  # Takes too much memory
-    "triton": _moe_fused_linear_triton_bwd,
+    "naive": _moe_fused_linear_naive_bwd_weight,
+    # "compile": _moe_fused_linear_torch_bwd_weight_compiled,  # Takes too much memory
+    "triton": _moe_fused_linear_triton_bwd_weight,
 }
 provider_names = list(providers)
 
@@ -63,7 +63,7 @@ def benchmark(N, provider):
     gc.collect()
     torch.cuda.empty_cache()
 
-    perf = lambda ms: 2 * N * out_features * in_features / ms * 1e-6
+    perf = lambda ms: N * out_features * in_features / ms * 1e-6
     return perf(ms), perf(max_ms), perf(min_ms)
 
 

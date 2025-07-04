@@ -5,10 +5,13 @@ from math import sqrt
 import torch
 
 from qwen3_moe_fused.functional import (
-    _moe_fused_linear_naive_bwd,
-    _moe_fused_linear_torch_bwd,
+    _moe_fused_linear_naive_bwd_input,
+    _moe_fused_linear_naive_bwd_weight,
+    _moe_fused_linear_torch_bwd_input,
+    _moe_fused_linear_torch_bwd_weight,
     _moe_fused_linear_torch_fwd,
-    _moe_fused_linear_triton_bwd,
+    _moe_fused_linear_triton_bwd_input,
+    _moe_fused_linear_triton_bwd_weight,
 )
 
 
@@ -36,21 +39,22 @@ def main():
     print("grad_input_auto", grad_input_auto.shape, grad_input_auto.dtype)
     print("grad_weight_auto", grad_weight_auto.shape, grad_weight_auto.dtype)
 
-    grad_input_naive, grad_weight_naive, _ = _moe_fused_linear_naive_bwd(grad_output, input, weight, selected_experts)
+    grad_input_naive = _moe_fused_linear_naive_bwd_input(grad_output, input, weight, selected_experts)
+    grad_weight_naive = _moe_fused_linear_naive_bwd_weight(grad_output, input, weight, selected_experts)
     print("grad_input_naive", grad_input_naive.shape, grad_input_naive.dtype)
     print("grad_weight_naive", grad_weight_naive.shape, grad_weight_naive.dtype)
     print(torch.allclose(grad_input_naive, grad_input_auto, rtol=1e-6, atol=1e-6))
     print(torch.allclose(grad_weight_naive, grad_weight_auto, rtol=1e-6, atol=1e-6))
 
-    grad_input_torch, grad_weight_torch, _ = _moe_fused_linear_torch_bwd(grad_output, input, weight, selected_experts)
+    grad_input_torch = _moe_fused_linear_torch_bwd_input(grad_output, input, weight, selected_experts)
+    grad_weight_torch = _moe_fused_linear_torch_bwd_weight(grad_output, input, weight, selected_experts)
     print("grad_input_torch", grad_input_torch.shape, grad_input_torch.dtype)
     print("grad_weight_torch", grad_weight_torch.shape, grad_weight_torch.dtype)
     print(torch.allclose(grad_input_torch, grad_input_auto, rtol=1e-6, atol=1e-6))
     print(torch.allclose(grad_weight_torch, grad_weight_auto, rtol=1e-6, atol=1e-6))
 
-    grad_input_triton, grad_weight_triton, _ = _moe_fused_linear_triton_bwd(
-        grad_output, input, weight, selected_experts
-    )
+    grad_input_triton = _moe_fused_linear_triton_bwd_input(grad_output, input, weight, selected_experts)
+    grad_weight_triton = _moe_fused_linear_triton_bwd_weight(grad_output, input, weight, selected_experts)
     print("grad_input_triton", grad_input_triton.shape, grad_input_triton.dtype)
     print("grad_weight_triton", grad_weight_triton.shape, grad_weight_triton.dtype)
     print(torch.allclose(grad_input_triton, grad_input_auto, rtol=1e-6, atol=1e-6))
