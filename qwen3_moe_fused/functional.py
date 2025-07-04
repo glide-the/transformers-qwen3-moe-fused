@@ -1,6 +1,7 @@
 import torch
 
 from .kernels.index_matmul import index_matmul
+from .kernels.index_matmul_batched import index_matmul_batched
 from .kernels.index_matmul_sorted import index_matmul_sorted
 from .kernels.index_matmul_transposed import index_matmul_transposed
 from .kernels.matmul_scatter_add import matmul_scatter_add
@@ -133,6 +134,7 @@ _moe_fused_linear_torch_bwd_weight_compiled = torch.compile(
 
 _moe_fused_linear_triton_fwd = index_matmul
 _moe_fused_linear_triton_sorted_fwd = index_matmul_sorted
+_moe_fused_linear_triton_batched_fwd = index_matmul_batched
 
 
 def _moe_fused_linear_triton_bwd_input(

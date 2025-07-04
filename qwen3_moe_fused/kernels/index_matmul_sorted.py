@@ -46,8 +46,8 @@ def _index_matmul_sorted_kernel(
     stride_ob,
     stride_oo,
     # Metadata
-    BLOCK_SIZE_I: tl.constexpr,
-    BLOCK_SIZE_O: tl.constexpr,
+    BLOCK_SIZE_I: tl.constexpr = 64,
+    BLOCK_SIZE_O: tl.constexpr = 64,
 ):
     b = tl.program_id(axis=0)
     e = tl.load(s_ptr + stride_sb * b)

@@ -10,6 +10,7 @@ import triton
 from qwen3_moe_fused.functional import (
     _moe_fused_linear_naive_fwd,
     _moe_fused_linear_torch_fwd_compiled,
+    _moe_fused_linear_triton_batched_fwd,
     _moe_fused_linear_triton_fwd,
     _moe_fused_linear_triton_sorted_fwd,
 )
@@ -21,7 +22,8 @@ providers = {
     "naive": _moe_fused_linear_naive_fwd,
     "compile": _moe_fused_linear_torch_fwd_compiled,
     "triton": _moe_fused_linear_triton_fwd,
-    "sorted": _moe_fused_linear_triton_sorted_fwd,
+    # "sorted": _moe_fused_linear_triton_sorted_fwd,
+    # "batched": _moe_fused_linear_triton_batched_fwd,
 }
 provider_names = list(providers)
 
@@ -51,17 +53,9 @@ def benchmark(N, provider):
 
     input = torch.randn(N, in_features, device=device, dtype=dtype)
     weight = 1 / sqrt(in_features) * torch.randn(num_experts, out_features, in_features, device=device, dtype=dtype)
-
-    # Try different patterns of selected_experts
     selected_experts = torch.randint(0, num_experts, (N,), device=device, dtype=torch.int32)
-
-    # selected_experts = torch.zeros(N, device=device, dtype=torch.int32)
-
-    # selected_experts = torch.arange(num_experts, device=device, dtype=torch.int32)
-    # selected_experts = selected_experts.unsqueeze(1).expand(num_experts, N // num_experts).reshape(N)
-
-    # selected_experts = torch.randint(0, num_experts, (N,), device=device, dtype=torch.int32)
-    # selected_experts, _ = torch.sort(selected_experts)
+    # Assume selected_experts is sorted
+    selected_experts, _ = torch.sort(selected_experts)
 
     quantiles = [0.5, 0.2, 0.8]
     ms, min_ms, max_ms = triton.testing.do_bench(

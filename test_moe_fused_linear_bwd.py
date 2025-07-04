@@ -26,6 +26,7 @@ def main():
     input = torch.randn(batch_size, in_features, device=device, dtype=dtype)
     weight = 1 / sqrt(in_features) * torch.randn(num_experts, out_features, in_features, device=device, dtype=dtype)
     selected_experts = torch.randint(0, num_experts, (batch_size,), device=device, dtype=torch.int32)
+    # Assume selected_experts is sorted
     selected_experts, _ = torch.sort(selected_experts)
 
     input_auto = input.clone().requires_grad_()

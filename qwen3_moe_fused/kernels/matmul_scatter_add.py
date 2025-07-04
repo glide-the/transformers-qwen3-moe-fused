@@ -1,11 +1,11 @@
 # out[e, o, i] = sum_b if(s[b] == e) y[b, o] * x[b, i]
 # Assume s is sorted, so for each expert, we only need to sum over a slice of b
 
-from functools import partial
-
 import torch
 import triton
 import triton.language as tl
+
+from .utils import compute_batch_begins_ends
 
 
 @triton.autotune(
@@ -50,10 +50,10 @@ def _matmul_scatter_add_kernel(
     stride_oo,
     stride_oi,
     # Metadata
-    BLOCK_SIZE_B: tl.constexpr,
-    BLOCK_SIZE_I: tl.constexpr,
-    BLOCK_SIZE_O: tl.constexpr,
-) -> None:
+    BLOCK_SIZE_B: tl.constexpr = 32,
+    BLOCK_SIZE_I: tl.constexpr = 64,
+    BLOCK_SIZE_O: tl.constexpr = 64,
+):
     e = tl.program_id(axis=0)
     b_begin = tl.load(s_begins_ends_ptr + stride_se * e)
     b_end = tl.load(s_begins_ends_ptr + stride_se * e + stride_s1)
@@ -74,9 +74,8 @@ def _matmul_scatter_add_kernel(
     accumulator = tl.zeros((BLOCK_SIZE_O, BLOCK_SIZE_I), dtype=tl.float32)
     while blk_idx_b < blk_idx_b_end:
         mask_b = (offs_b >= b_begin) & (offs_b < b_end)
-        mask_b = mask_b[:, None]
-        _x = tl.load(x_ptrs, mask=mask_b, other=0.0)
-        _y = tl.load(y_ptrs, mask=mask_b, other=0.0)
+        _x = tl.load(x_ptrs, mask=mask_b[:, None], other=0.0)
+        _y = tl.load(y_ptrs, mask=mask_b[:, None], other=0.0)
 
         accumulator = tl.dot(_y.T, _x, accumulator)
         # For testing with float32, use:
@@ -94,15 +93,6 @@ def _matmul_scatter_add_kernel(
     mask_o = offs_o < O
     mask_i = offs_i < I
     tl.store(out_ptrs, accumulator, mask=mask_o[:, None] & mask_i[None, :])
-
-
-@partial(torch.compile, fullgraph=True, mode="max-autotune-no-cudagraphs")
-def _compute_batch_begins_ends(s: torch.Tensor, E: int) -> torch.Tensor:
-    arange = torch.arange(E, device=s.device, dtype=s.dtype)
-    s_begins = (arange[:, None] > s[None, :]).to(torch.int32).sum(dim=1)
-    s_ends = (arange[:, None] >= s[None, :]).to(torch.int32).sum(dim=1)
-    s_begins_ends = torch.stack([s_begins, s_ends], dim=1)
-    return s_begins_ends
 
 
 def matmul_scatter_add(x: torch.Tensor, y: torch.Tensor, s: torch.Tensor, E: int, dtype: torch.dtype) -> torch.Tensor:
@@ -123,7 +113,7 @@ def matmul_scatter_add(x: torch.Tensor, y: torch.Tensor, s: torch.Tensor, E: int
 
     # It's possible to reuse s_begins_ends in multiple MoeFusedLinear layers that use the same s,
     # but for now we recompute it for clarity
-    s_begins_ends = _compute_batch_begins_ends(s, E)
+    s_begins_ends = compute_batch_begins_ends(s, E)
 
     out = torch.zeros((E, O, I), device=x.device, dtype=dtype)
     grid = lambda META: (
