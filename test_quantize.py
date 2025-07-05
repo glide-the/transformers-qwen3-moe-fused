@@ -2,11 +2,16 @@
 #
 # Run test_model.py first
 
+import os
+
 import torch
 from transformers import BitsAndBytesConfig, Qwen3MoeModel, set_seed
 
 from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedModel
 from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
+
+
+os.environ["TRITON_PRINT_AUTOTUNING"] = "1"
 
 
 def get_rtol_atol(actual, expect):
@@ -34,6 +39,10 @@ def main():
     dtype = torch.bfloat16
     set_seed(42)
 
+    vocab_size = 151936
+    batch_size = 2
+    seq_len = 64
+
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_compute_dtype=torch.bfloat16,
@@ -54,7 +63,7 @@ def main():
     model_quantized = Qwen3MoeModel.from_pretrained(model_quantized_dir, device_map=device)
     model_fused_quantized = Qwen3MoeFusedModel.from_pretrained(model_fused_quantized_dir, device_map=device)
 
-    input_ids = torch.tensor([[1, 2, 3], [4, 5, 6]], device=device, dtype=torch.int32)
+    input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device, dtype=torch.int32)
     hidden = model(input_ids=input_ids).last_hidden_state
     hidden_quantized = model_quantized(input_ids=input_ids).last_hidden_state
     hidden_fused_quantized = model_fused_quantized(input_ids=input_ids).last_hidden_state

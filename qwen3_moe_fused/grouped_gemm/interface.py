@@ -306,6 +306,7 @@ def grouped_gemm_dX(
     fuse_mul_pre: bool = False,
     fuse_mul_post: bool = False,
     autotune: bool = False,
+    dtype: torch.dtype = None,
 ) -> torch.Tensor:
     """
     dX backward kernel
@@ -374,15 +375,20 @@ def grouped_gemm_dX(
     )
     num_tokens = M_total // topk
 
-    total_tokens = gather_indices.shape[0]
-    assert total_tokens == M_total, (
-        f"Total tokens ({total_tokens}) must match M_total ({M_total})"
-    )
+    if gather_indices is None:
+        total_tokens = M_total
+    else:
+        total_tokens = gather_indices.shape[0]
+        assert total_tokens == M_total, (
+            f"Total tokens ({total_tokens}) must match M_total ({M_total})"
+        )
 
     # Note that the output shape is [NUM_TOKENS * TOPK, K] even when `permute_x` is True since we need to accumulate gradients across all experts chosen by the token.
     # This will be done in a post-processing step reduction step.
     output_shape = (total_tokens, K)
-    dX = torch.zeros(output_shape, device=dY.device, dtype=dY.dtype)
+    if dtype is None:
+        dtype = dY.dtype
+    dX = torch.zeros(output_shape, device=dY.device, dtype=dtype)
 
     NUM_SMS = torch.cuda.get_device_properties(
         "cuda"
@@ -466,6 +472,7 @@ def grouped_gemm_dW(
     flatten: bool = True,
     autotune: bool = False,
     debug: bool = False,
+    dtype: torch.dtype = None,
 ) -> torch.Tensor:
     """
     X: (M, K) hidden states where M is the num_tokens if `permute_x` is True, otherwise `total_tokens` where `total_tokens = num_tokens * topk`.
@@ -537,7 +544,9 @@ def grouped_gemm_dW(
 
     assert M_grad == total_tokens, f"dY M ({M_grad}) != total_tokens ({total_tokens})"
 
-    dW = torch.zeros((num_experts, N, K), device=X.device, dtype=X.dtype)
+    if dtype is None:
+        dtype = X.dtype
+    dW = torch.zeros((num_experts, N, K), device=X.device, dtype=dtype)
 
     if not autotune:
         BLOCK_SIZE_M = min(total_tokens, BLOCK_SIZE_M)
@@ -727,6 +736,7 @@ class GroupedGemm(torch.autograd.Function):
                 permute_y=permute_y,
                 # Autotune -- this will override the manual kernel config if true
                 autotune=autotune,
+                dtype=W.dtype,
                 # Manual kernel config
                 **bwd_dW_config,
             )
@@ -755,6 +765,7 @@ class GroupedGemm(torch.autograd.Function):
                 permute_y=permute_y,
                 # Autotune -- this will override the manual kernel config if true
                 autotune=autotune,
+                dtype=X.dtype,
                 # Manual kernel config
                 **bwd_dX_config,
             )

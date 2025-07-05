@@ -2,10 +2,15 @@
 #
 # Example to inference the fused and quantized version of Qwen3-30B-A3B
 
+import os
+
 from transformers import AutoTokenizer
 
 from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedForCausalLM
 from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
+
+
+os.environ["TRITON_PRINT_AUTOTUNING"] = "1"
 
 
 def main():

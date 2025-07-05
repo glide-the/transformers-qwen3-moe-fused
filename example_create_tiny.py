@@ -18,14 +18,14 @@ def main():
 
     # Create the model
     config = Qwen3MoeConfig(
-        hidden_size=16,
+        hidden_size=512,
         intermediate_size=5,
-        num_hidden_layers=2,
-        num_attention_heads=8,
+        num_hidden_layers=1,
+        num_attention_heads=32,
         num_key_value_heads=4,
         max_window_layers=2,
-        moe_intermediate_size=3,
-        num_experts=9,
+        moe_intermediate_size=256,
+        num_experts=16,
         norm_topk_prob=True,
     )
     model = Qwen3MoeFusedForCausalLM(config)

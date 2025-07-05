@@ -7,25 +7,13 @@ from math import sqrt
 import torch
 import triton
 
-from qwen3_moe_fused.functional import (
-    _moe_fused_linear_grouped_gemm_fwd,
-    _moe_fused_linear_naive_fwd,
-    _moe_fused_linear_torch_fwd_compiled,
-    _moe_fused_linear_triton_batched_fwd,
-    _moe_fused_linear_triton_fwd,
-    _moe_fused_linear_triton_sorted_fwd,
-)
+from qwen3_moe_fused.functional import moe_fused_linear
 
 
 os.environ["TRITON_PRINT_AUTOTUNING"] = "1"
 
 providers = {
-    "naive": _moe_fused_linear_naive_fwd,
-    "compile": _moe_fused_linear_torch_fwd_compiled,
-    "triton": _moe_fused_linear_triton_fwd,
-    # "sorted": _moe_fused_linear_triton_sorted_fwd,
-    # "batched": _moe_fused_linear_triton_batched_fwd,
-    "grouped_gemm": _moe_fused_linear_grouped_gemm_fwd,
+    "grouped_gemm": moe_fused_linear,
 }
 provider_names = list(providers)
 

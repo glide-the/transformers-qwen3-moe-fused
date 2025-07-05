@@ -2,6 +2,8 @@
 #
 # Run test_model.py first
 
+import os
+
 import torch
 from peft import LoraConfig, PeftModel, get_peft_model
 from transformers import Qwen3MoeModel, set_seed
@@ -13,6 +15,10 @@ from qwen3_moe_fused.modular_qwen3_moe_fused import (
     Qwen3MoeFusedModel,
     moe_fused_kaiming_uniform_,
 )
+from test_quantize import get_rtol_atol
+
+
+os.environ["TRITON_PRINT_AUTOTUNING"] = "1"
 
 
 def main():
@@ -25,6 +31,10 @@ def main():
     device = "cuda"
     dtype = torch.float32
     set_seed(42)
+
+    vocab_size = 151936
+    batch_size = 2
+    seq_len = 64
 
     lora_config = LoraConfig(
         target_modules=[
@@ -79,15 +89,15 @@ def main():
         model_roundtrip, lora_roundtrip_dir, device_map=device, torch_dtype=dtype
     )
 
-    input_ids = torch.tensor([[1, 2, 3], [4, 5, 6]], device=device, dtype=torch.int32)
+    input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device, dtype=torch.int32)
     hidden = model(input_ids=input_ids).last_hidden_state
     hidden_fused = model_fused(input_ids=input_ids).last_hidden_state
     hidden_roundtrip = model_roundtrip(input_ids=input_ids).last_hidden_state
     # print(hidden.shape, hidden.device, hidden.dtype)
     # print(hidden_fused.shape, hidden_fused.device, hidden_fused.dtype)
     # print(hidden_roundtrip.shape, hidden_roundtrip.device, hidden_roundtrip.dtype)
-    print(torch.allclose(hidden_fused, hidden, rtol=1e-6, atol=1e-6))
-    print(torch.allclose(hidden_roundtrip, hidden, rtol=1e-6, atol=1e-6))
+    print(get_rtol_atol(hidden_fused, hidden))
+    print(get_rtol_atol(hidden_roundtrip, hidden))
 
 
 if __name__ == "__main__":

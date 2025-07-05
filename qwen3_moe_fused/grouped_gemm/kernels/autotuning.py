@@ -361,6 +361,9 @@ def prune_dX_configs(configs: List[triton.Config], args, **kwargs):
     pruned_configs = []
 
     for config in configs:
+        # disable TMA if gpu does not support it
+        maybe_disable_tma(config)
+
         if common_prune_criteria(config, kwargs, dtype):
             continue
         if config.kwargs["USE_TMA_LOAD_dY"] and kwargs["PERMUTE_Y"]:
@@ -381,6 +384,9 @@ def prune_kernel_configs_backward_dW(configs: list[triton.Config], args, **kwarg
     logger.debug(f"Pruning configs: {len(configs)}")
 
     for config in configs:
+        # disable TMA if gpu does not support it
+        maybe_disable_tma(config)
+
         if common_prune_criteria(config, kwargs, dtype):
             continue
         if config.kwargs["USE_TMA_LOAD_dY"] and kwargs["PERMUTE_Y"]:
