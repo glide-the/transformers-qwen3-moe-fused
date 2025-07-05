@@ -5,7 +5,7 @@ import torch
 import triton
 import triton.language as tl
 
-from .utils import get_batch_begins_ends
+from ..kernels.indexing import get_batch_begins_ends
 
 
 @triton.autotune(

@@ -15,6 +15,7 @@ from transformers.models.qwen3_moe.modeling_qwen3_moe import (
 )
 
 from .functional import moe_fused_linear
+from .kernels.indexing import sort_experts
 from .kernels.silu_mul import silu_mul
 
 
@@ -100,9 +101,7 @@ class Qwen3MoeFusedSparseMoeBlock(nn.Module):
 
         # Sort selected_experts and hidden_states for better memory coalescence of weight
         # It's possible to fuse a sort and a MoeFusedLinear layer, but for now we separate them for clarity
-        selected_experts, sort_idx = torch.sort(selected_experts)
-        inv_sort_idx = torch.empty_like(sort_idx)
-        inv_sort_idx[sort_idx] = torch.arange(sort_idx.numel(), device=sort_idx.device, dtype=sort_idx.dtype)
+        selected_experts, sort_idx, inv_sort_idx = sort_experts(selected_experts, self.num_experts)
         hidden_states = hidden_states[sort_idx]
 
         # It's possible to fuse gate_h and up_h, but this affects the shape of LoRA

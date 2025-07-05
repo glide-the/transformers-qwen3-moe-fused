@@ -1,8 +1,8 @@
 import torch
 
 from .gemv.interface import moe_fused_linear_gemv
-from .gemv.utils import get_routing_indices
 from .grouped_gemm.interface import grouped_gemm
+from .kernels.indexing import get_expert_counts
 
 
 # output[b, o] = sum_i weight[selected_experts[b], o, i] * input[b, i]
@@ -72,14 +72,14 @@ def moe_fused_linear(input: torch.Tensor, weight: torch.Tensor, selected_experts
         # Because of the grouped GEMM kernel and its autotune configs,
         # it only works when in_features and out_features are multipliers of 256
 
-        # It's possible to reuse token_counts_by_expert in multiple MoeFusedLinear layers that use
-        # the same selected_experts, but for now we recompute it for clarity
-        token_counts_by_expert = get_routing_indices(selected_experts, weight.shape[0])
+        # It's possible to reuse m_sizes in multiple MoeFusedLinear layers that use the same selected_experts,
+        # but for now we recompute it for clarity
+        m_sizes = get_expert_counts(selected_experts, weight.shape[0])
 
         return grouped_gemm(
             X=input,
             W=weight,
-            m_sizes=token_counts_by_expert,
+            m_sizes=m_sizes,
             topk=1,  # Not used
             autotune=True,
         )

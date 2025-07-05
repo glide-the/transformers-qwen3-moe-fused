@@ -1,3 +1,4 @@
+# h = silu(e) * g
 # Modified from https://github.com/unslothai/unsloth/blob/01c5e1a24935b93d9d3197815ad71751d9dfb37a/unsloth/kernels/swiglu.py
 
 import torch
