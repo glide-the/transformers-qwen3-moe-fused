@@ -15,6 +15,7 @@ from transformers.models.qwen3_moe.modeling_qwen3_moe import (
 )
 
 from .functional import moe_fused_linear
+from .kernels.silu_mul import silu_mul
 
 
 def moe_fused_kaiming_uniform_(weight):
@@ -107,8 +108,7 @@ class Qwen3MoeFusedSparseMoeBlock(nn.Module):
         # It's possible to fuse gate_h and up_h, but this affects the shape of LoRA
         gate_h = self.gate_proj(hidden_states, selected_experts)
         up_h = self.up_proj(hidden_states, selected_experts)
-        # TODO: Fuse silu and mul
-        hidden_states = F.silu(gate_h) * up_h
+        hidden_states = silu_mul(gate_h, up_h)
         del gate_h, up_h
         hidden_states = self.down_proj(hidden_states, selected_experts)
 
