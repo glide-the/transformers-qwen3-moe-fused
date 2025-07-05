@@ -69,10 +69,11 @@ def main():
         weight_decay=1e-2,
         num_train_epochs=1,
         logging_steps=1,
+        save_steps=3,
         bf16=True,
         optim="adamw_8bit",
+        dataset_text_field="text",
         dataset_num_proc=1,
-        max_length=1024,
         report_to="none",
     )
     trainer = SFTTrainer(

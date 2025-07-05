@@ -1,20 +1,13 @@
 #!/usr/bin/env python3
 #
-# Example to train a tiny model using Unsloth
-# Run example_create_tiny.py first
-#
-# If it shows `NameError: name 'Any' is not defined.`
-# then we need to add a line:
-# source = source.replace(": Any", "")
-# after https://github.com/unslothai/unsloth-zoo/blob/362fb45ee5906052bf09a43f1052c578159069ac/unsloth_zoo/compiler.py#L1283
-# See https://github.com/unslothai/unsloth/issues/2874
+# Example to train a LoRA on the fused and quantized version of Qwen3-30B-A3B using Unsloth
 
 import os
 
 from unsloth import FastModel
 
 # Import unsloth before others
-from datasets import Dataset
+from datasets import load_dataset
 from trl import SFTConfig, SFTTrainer
 
 from qwen3_moe_fused.lora import patch_lora_config
@@ -29,9 +22,9 @@ def main():
     patch_bnb_quantizer()
     patch_lora_config()
 
-    model_dir = "./pretrained/qwen-moe-tiny-lm-quantized"
+    model_id = "woctordho/Qwen3-30B-A3B-fused-bnb-4bit"
 
-    model, tokenizer = FastModel.from_pretrained(model_dir, auto_model=Qwen3MoeFusedForCausalLM)
+    model, tokenizer = FastModel.from_pretrained(model_id, auto_model=Qwen3MoeFusedForCausalLM)
 
     # TODO: Support rank_pattern in Unsloth
     model = FastModel.get_peft_model(
@@ -53,23 +46,26 @@ def main():
         random_state=3407,
     )
 
-    dataset = Dataset.from_dict({"text": [x * 100 for x in "abcdefghijkl"]})
+    dataset = load_dataset("stanfordnlp/imdb", split="train")
 
-    # These hyperparameters are for exaggerating the training of the tiny model
-    # Don't use them in actual training
     sft_config = SFTConfig(
-        per_device_train_batch_size=2,
+        per_device_train_batch_size=1,  # Increase batch size if you have more memory
         gradient_accumulation_steps=1,
-        learning_rate=1e-2,
-        weight_decay=1e-2,
+        learning_rate=1e-4,
+        weight_decay=1e-3,  # For MoE models, weight decay can be smaller than dense models
         num_train_epochs=1,
+        lr_scheduler_type="linear",
+        warmup_steps=10,
         logging_steps=1,
-        save_steps=3,
+        save_steps=100,
+        save_total_limit=5,
         bf16=True,
         optim="adamw_8bit",
         dataset_text_field="text",
         dataset_num_proc=1,
-        report_to="none",
+        torch_compile=True,
+        torch_compile_mode="max-autotune",
+        report_to="none",  # You may report to Wandb
         seed=3407,
     )
     trainer = SFTTrainer(
