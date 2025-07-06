@@ -7,20 +7,14 @@ from functools import partial
 import torch
 import triton
 
-from qwen3_moe_fused.gemv.matmul_scatter_add import matmul_scatter_add
-from qwen3_moe_fused.grouped_gemm.interface import grouped_gemm_dW
-from qwen3_moe_fused.grouped_gemm.kernels_masked.backward_dw import (
-    grouped_gemm_backward_dw,
-)
+from qwen3_moe_fused.grouped_gemm.backward_dw import grouped_gemm_backward_dw
 from qwen3_moe_fused.kernels.indexing import get_expert_counts
 
 
 os.environ["TRITON_PRINT_AUTOTUNING"] = "1"
 
 providers = {
-    "gemv": partial(matmul_scatter_add, dtype=torch.bfloat16),
-    "grouped_gemm": partial(grouped_gemm_dW, autotune=True),
-    "grouped_gemm_masked": partial(grouped_gemm_backward_dw, dtype=torch.bfloat16),
+    "grouped_gemm": partial(grouped_gemm_backward_dw, dtype=torch.bfloat16),
 }
 provider_names = list(providers)
 
@@ -56,14 +50,9 @@ def benchmark(N, provider):
     grad_output = torch.randn(N, out_features, device=device, dtype=dtype)
 
     quantiles = [0.5, 0.2, 0.8]
-    if provider == "gemv":
-        ms, min_ms, max_ms = triton.testing.do_bench(
-            lambda: providers[provider](input, grad_output, selected_experts, num_experts), quantiles=quantiles
-        )
-    else:
-        ms, min_ms, max_ms = triton.testing.do_bench(
-            lambda: providers[provider](input, grad_output, m_sizes), quantiles=quantiles
-        )
+    ms, min_ms, max_ms = triton.testing.do_bench(
+        lambda: providers[provider](input, grad_output, m_sizes), quantiles=quantiles
+    )
 
     del input, selected_experts, m_sizes, grad_output
     gc.collect()

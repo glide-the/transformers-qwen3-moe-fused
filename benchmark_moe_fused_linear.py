@@ -2,24 +2,19 @@
 
 import gc
 import os
-from functools import partial
 from math import sqrt
 
 import torch
 import triton
 
-from qwen3_moe_fused.grouped_gemm.interface import grouped_gemm_forward
-from qwen3_moe_fused.grouped_gemm.kernels_masked.forward import (
-    grouped_gemm_forward as grouped_gemm_forward_masked,
-)
+from qwen3_moe_fused.grouped_gemm.forward import grouped_gemm_forward
 from qwen3_moe_fused.kernels.indexing import get_expert_counts
 
 
 os.environ["TRITON_PRINT_AUTOTUNING"] = "1"
 
 providers = {
-    "grouped_gemm": partial(grouped_gemm_forward, autotune=True),
-    "grouped_gemm_masked": grouped_gemm_forward_masked,
+    "grouped_gemm": grouped_gemm_forward,
 }
 provider_names = list(providers)
 

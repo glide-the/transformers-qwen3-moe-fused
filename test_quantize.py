@@ -40,8 +40,8 @@ def main():
     set_seed(42)
 
     vocab_size = 151936
-    batch_size = 2
-    seq_len = 64
+    batch_size = 7
+    seq_len = 13
 
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,

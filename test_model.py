@@ -23,21 +23,19 @@ def main():
     max_shard_size = None
 
     vocab_size = 151936
-    batch_size = 2
-    seq_len = 64
+    batch_size = 7
+    seq_len = 13
 
-    # Because of the grouped GEMM kernel and its autotune configs,
-    # hidden_size and moe_intermediate_size must be multipliers of 256
     config = Qwen3MoeConfig(
         vocab_size=vocab_size,
-        hidden_size=512,
+        hidden_size=16,
         intermediate_size=5,
-        num_hidden_layers=1,
-        num_attention_heads=32,
+        num_hidden_layers=2,
+        num_attention_heads=8,
         num_key_value_heads=4,
         max_window_layers=2,
-        moe_intermediate_size=256,
-        num_experts=16,
+        moe_intermediate_size=3,
+        num_experts=11,
         norm_topk_prob=True,
     )
 

@@ -1,4 +1,4 @@
-# y[m, n] = sum_k w[s[m], n, k] * x[m, k]
+# y[m, n] = sum_k w[s[m], k, n] * x[m, k]
 
 from typing import Optional
 
@@ -12,10 +12,10 @@ from .autotuning import get_autotune_configs, prune_configs
 @triton.autotune(
     configs=get_autotune_configs(),
     prune_configs_by={"early_config_prune": prune_configs},
-    key=["N", "K"],
+    key=["M", "N", "K", "NUM_EXPERTS"],
 )
 @triton.jit
-def _grouped_gemm_forward_kernel(
+def _grouped_gemm_forward_transposed_kernel(
     # Pointers
     x_ptr,
     w_ptr,
@@ -31,8 +31,8 @@ def _grouped_gemm_forward_kernel(
     stride_xm,
     stride_xk,
     stride_we,
-    stride_wn,
     stride_wk,
+    stride_wn,
     stride_ym,
     stride_yn,
     # Metadata
@@ -68,7 +68,7 @@ def _grouped_gemm_forward_kernel(
 
                 offs_m = m_start + tile_m_idx * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
                 x_ptrs = x_ptr + stride_xm * offs_m[:, None] + stride_xk * offs_k[None, :]
-                mask_m = offs_m < m_end
+                mask_m = offs_m < m_start + m_size
 
                 offs_n = tile_n_idx * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
                 w_ptrs = w_ptr + stride_we * expert_idx + stride_wn * offs_n[:, None] + stride_wk * offs_k[None, :]
@@ -98,7 +98,7 @@ def _grouped_gemm_forward_kernel(
             processed_tiles += num_tiles_per_expert
 
 
-def grouped_gemm_forward(
+def grouped_gemm_forward_transposed(
     x: torch.Tensor, w: torch.Tensor, m_sizes: torch.Tensor, dtype: Optional[torch.dtype] = None
 ) -> torch.Tensor:
     assert x.is_cuda
@@ -112,8 +112,8 @@ def grouped_gemm_forward(
     assert w.ndim == 3
     assert m_sizes.ndim == 1
     M, K = x.shape
-    E, N, _ = w.shape
-    assert w.shape[2] == K
+    E, _, N = w.shape
+    assert w.shape[1] == K
     assert m_sizes.numel() == E
 
     if dtype is None:
@@ -121,7 +121,7 @@ def grouped_gemm_forward(
     y = torch.empty((M, N), device=x.device, dtype=dtype)
     NUM_SMS = torch.cuda.get_device_properties("cuda").multi_processor_count
     grid = lambda META: (NUM_SMS,)
-    _grouped_gemm_forward_kernel[grid](
+    _grouped_gemm_forward_transposed_kernel[grid](
         # Pointers
         x,
         w,

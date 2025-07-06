@@ -11,6 +11,7 @@ from qwen3_moe_fused.functional import (
     _moe_fused_linear_naive_fwd,
     moe_fused_linear,
 )
+from qwen3_moe_fused.kernels.indexing import get_expert_counts
 from test_quantize import get_rtol_atol
 
 
@@ -42,6 +43,7 @@ def main():
     selected_experts = torch.randint(0, num_experts, (batch_size,), device=device, dtype=torch.int32)
     # Assume selected_experts is sorted
     selected_experts, _ = torch.sort(selected_experts)
+    m_sizes = get_expert_counts(selected_experts, num_experts)
     grad_output = torch.randn(batch_size, out_features, device=device, dtype=dtype)
 
     input_auto = input.clone().requires_grad_()
@@ -64,7 +66,7 @@ def main():
 
     input_grouped_gemm = input.clone().requires_grad_()
     weight_grouped_gemm = weight.clone().requires_grad_()
-    output_grouped_gemm = moe_fused_linear(input_grouped_gemm, weight_grouped_gemm, selected_experts)
+    output_grouped_gemm = moe_fused_linear(input_grouped_gemm, weight_grouped_gemm, m_sizes)
     output_grouped_gemm.backward(gradient=grad_output)
     grad_input_grouped_gemm = input_grouped_gemm.grad
     grad_weight_grouped_gemm = weight_grouped_gemm.grad

@@ -1,13 +1,27 @@
 import torch
 
-from .grouped_gemm.kernels_masked.interface import grouped_gemm
-from .kernels.indexing import get_expert_counts
+from .grouped_gemm.interface import grouped_gemm
 
 
 # output[b, o] = sum_i weight[selected_experts[b], o, i] * input[b, i]
 def _moe_fused_linear_naive_fwd(
     input: torch.Tensor, weight: torch.Tensor, selected_experts: torch.Tensor
 ) -> torch.Tensor:
+    """
+    Computes a MoE linear operation.
+
+    The operation is defined as:
+    `output[b, o] = sum_i weight[selected_experts[b], o, i] * input[b, i]`
+
+    Args:
+        input (`torch.FloatTensor`): input tensor of shape `(batch_size, in_features)`.
+        weight (`torch.FloatTensor`): weight tensor of shape `(num_experts, out_features, in_features)`.
+        selected_experts (`torch.LongTensor`): tensor of selected expert indices in shape `(batch_size,)`.
+            Each element is in the range `[0, num_experts)`.
+
+    Returns:
+        output (`torch.FloatTensor`): output tensor of shape `(batch_size, out_features)`.
+    """
     batch_size, in_features = input.shape
     num_experts, out_features, _ = weight.shape
 
@@ -47,9 +61,9 @@ def _moe_fused_linear_naive_bwd_weight(
     return grad_weight
 
 
-def moe_fused_linear(input: torch.Tensor, weight: torch.Tensor, selected_experts: torch.Tensor) -> torch.Tensor:
+def moe_fused_linear(input: torch.Tensor, weight: torch.Tensor, m_sizes: torch.Tensor) -> torch.Tensor:
     """
-    Computes a MoE linear operation using grouped GEMM for large matrices, or GEMV for small matrices.
+    Computes a MoE linear operation using grouped GEMM.
 
     The operation is defined as:
     `output[b, o] = sum_i weight[selected_experts[b], o, i] * input[b, i]`
@@ -57,13 +71,9 @@ def moe_fused_linear(input: torch.Tensor, weight: torch.Tensor, selected_experts
     Args:
         input (`torch.FloatTensor`): input tensor of shape `(batch_size, in_features)`.
         weight (`torch.FloatTensor`): weight tensor of shape `(num_experts, out_features, in_features)`.
-        selected_experts (`torch.LongTensor`): tensor of selected expert indices in shape `(batch_size,)`.
-            Each element is in the range `[0, num_experts)`.
+        m_sizes (`torch.LongTensor`): counts of selected experts in shape `(num_experts)`. Should sum to `batch_size`.
 
     Returns:
         output (`torch.FloatTensor`): output tensor of shape `(batch_size, out_features)`.
     """
-    # It's possible to reuse m_sizes in multiple MoeFusedLinear layers that use the same selected_experts,
-    # but for now we recompute it for clarity
-    m_sizes = get_expert_counts(selected_experts, weight.shape[0])
     return grouped_gemm(input, weight, m_sizes)

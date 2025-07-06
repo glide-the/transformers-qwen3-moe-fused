@@ -10,7 +10,7 @@ from .autotuning import get_autotune_configs, prune_configs
 @triton.autotune(
     configs=get_autotune_configs(),
     prune_configs_by={"early_config_prune": prune_configs},
-    key=["N", "K"],
+    key=["M", "N", "K", "NUM_EXPERTS"],
 )
 @triton.jit
 def _grouped_gemm_backward_dw_kernel(

@@ -14,10 +14,10 @@ from ..modular_qwen3_moe_fused import MoeFusedLinear
 
 
 # TODO: Fuse this
-def moe_fused_linear_4bit(input: torch.Tensor, weight: Params4bit, selected_experts: torch.Tensor) -> torch.Tensor:
+def moe_fused_linear_4bit(input: torch.Tensor, weight: Params4bit, m_sizes: torch.Tensor) -> torch.Tensor:
     assert not weight.requires_grad
     weight = dequantize_4bit(weight, weight.quant_state).to(input.dtype)
-    return moe_fused_linear(input, weight, selected_experts)
+    return moe_fused_linear(input, weight, m_sizes)
 
 
 class MoeFusedLinear4bit(MoeFusedLinear):
@@ -78,7 +78,7 @@ class MoeFusedLinear4bit(MoeFusedLinear):
             for k, v in self.weight.quant_state.as_dict(packed=True).items():
                 destination[prefix + "weight." + k] = v if keep_vars else v.detach()
 
-    def forward(self, x: torch.Tensor, selected_experts: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, m_sizes: torch.Tensor) -> torch.Tensor:
         fix_4bit_weight_quant_state_from_module(self)
 
         if not self.compute_type_is_set:
@@ -89,6 +89,6 @@ class MoeFusedLinear4bit(MoeFusedLinear):
         if self.compute_dtype is not None:
             x = x.to(self.compute_dtype)
 
-        x = moe_fused_linear_4bit(x, self.weight, selected_experts)
+        x = moe_fused_linear_4bit(x, self.weight, m_sizes)
         x = x.to(inp_dtype)
         return x

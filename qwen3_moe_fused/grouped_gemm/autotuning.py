@@ -63,14 +63,16 @@ def _common_prune_criteria(config, kwargs):
     num_experts = kwargs["NUM_EXPERTS"]
     tokens_per_expert = M // num_experts
     max_block_size_M = max(tokens_per_expert * 2, DEFAULT_M_BLOCK_SIZES[0])
+    max_block_size_N = max(N, DEFAULT_N_BLOCK_SIZES[0])
+    max_block_size_K = max(K, DEFAULT_K_BLOCK_SIZES[0])
     if BLOCK_SIZE_M > max_block_size_M:
         return True
-    if BLOCK_SIZE_N > N:
+    if BLOCK_SIZE_N > max_block_size_N:
         return True
-    if BLOCK_SIZE_K > K:
+    if BLOCK_SIZE_K > max_block_size_K:
         return True
 
-    min_block_size_M = min(triton.next_power_of_2(max_block_size_M // 2 + 1), 64)
+    min_block_size_M = min(triton.next_power_of_2(tokens_per_expert // 2 + 1), 64)
     min_block_size_N = min(triton.next_power_of_2(N // 2 + 1), 64)
     min_block_size_K = min(triton.next_power_of_2(K // 2 + 1), 64)
     if BLOCK_SIZE_M * BLOCK_SIZE_N < min_block_size_M * min_block_size_N:
