@@ -24,3 +24,7 @@ The functions in [`convert.py`](https://github.com/woct0rdho/transformers-qwen3-
 
 * Support [fast LoRA](https://github.com/unslothai/unsloth/blob/91598a6ee8ecda6dbaa2c9fd1ea9c75719da54a6/unsloth/kernels/fast_lora.py) in Unsloth
 * Try to upstream to Transformers or Unsloth. If you want to help with this, please open an issue.
+
+### License
+
+The files in `qwen3_moe_fused/grouped_gemm/` are modified from Unsloth kernels so they are AGPLv3 licensed, see the [explanation](https://github.com/unslothai/unsloth/discussions/2890#discussioncomment-13675890). The rest of this repo, including files modified from Transformers, PEFT, and bitsandbytes, are Apache-2.0 licensed.
