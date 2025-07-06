@@ -45,8 +45,8 @@ extend-safe-fixes = ["UP006"]
 [tool.ruff.lint.isort]
 lines-after-imports = 2
 # known-first-party = ["transformers"]
-known-unsloth = ["unsloth"]
-sections = ["FUTURE", "STDLIB", "UNSLOTH", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
+# known-unsloth = ["unsloth"]
+# sections = ["FUTURE", "STDLIB", "UNSLOTH", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 
 [tool.ruff.format]
 # Like Black, use double quotes for strings.

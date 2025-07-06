@@ -1,4 +1,4 @@
-# Copied from https://github.com/unslothai/unsloth/tree/main/unsloth/kernels/moe
+# Modified from https://github.com/unslothai/unsloth/tree/main/unsloth/kernels/moe
 
 import logging
 import warnings
@@ -133,13 +133,16 @@ def grouped_gemm_forward(
     Returns:
         y: (total_tokens, N) output of grouped GEMM
     """
-
-    assert X.device.type == "cuda", "X and W must be on CUDA"
-    assert m_sizes.device.type == "cuda", "m_sizes must be on CUDA"
-
-    X = X.contiguous()
-    W = W.contiguous()
-    m_sizes = m_sizes.contiguous()
+    assert X.is_cuda
+    assert W.device == X.device
+    assert m_sizes.device == X.device
+    assert m_sizes.dtype in [torch.int32, torch.int64]
+    assert X.is_contiguous()
+    assert W.is_contiguous()
+    assert m_sizes.is_contiguous()
+    assert X.ndim == 2
+    assert W.ndim == 3
+    assert m_sizes.ndim == 1
 
     # Preconditions
     assert not (permute_x and permute_y), "Cannot permute both X and Y"
@@ -163,9 +166,6 @@ def grouped_gemm_forward(
 
         triton.set_allocator(alloc_fn)
 
-    X = X.view(-1, X.shape[-1])
-    W = W.view(-1, W.shape[-1])
-
     if permute_x or permute_y:
         assert gather_indices is not None, (
             "gather_indices must be provided when permute_x or permute_y is True"
@@ -188,9 +188,10 @@ def grouped_gemm_forward(
         num_tokens = total_tokens // topk
 
     num_experts = m_sizes.shape[0]
-    _, K = X.shape
-    N = W.shape[0] // num_experts
-    assert K == W.shape[1], f"K ({K}) must match W.shape[1] ({W.shape[1]})"
+    assert num_experts == W.shape[0], f"num_experts ({num_experts}) must match W.shape[0] ({W.shape[0]})"
+    K = X.shape[1]
+    assert K == W.shape[2], f"K ({K}) must match W.shape[2] ({W.shape[2]})"
+    N = W.shape[1]
 
     if fuse_mul_post:
         global _FUSED_MUL_WARN
@@ -334,9 +335,16 @@ def grouped_gemm_dX(
     assert not fuse_mul_post, (
         "fuse_mul_post should only be used for inference, not for training"
     )
+
+    assert dY.is_cuda
+    assert W.device == dY.device
+    assert m_sizes.device == dY.device
+    assert m_sizes in [torch.int32, torch.int64]
     assert dY.is_contiguous()
     assert W.is_contiguous()
     assert m_sizes.is_contiguous()
+    assert dY.ndim == 2
+    assert W.ndim == 3
     assert m_sizes.ndim == 1
 
     # Preconditions
@@ -362,13 +370,10 @@ def grouped_gemm_dX(
         triton.set_allocator(alloc_fn)
 
     num_experts = m_sizes.shape[0]
-    dY = dY.view(-1, dY.shape[-1])
-    W = W.view(-1, W.shape[-1])
-
+    assert num_experts == W.shape[0], f"num_experts ({num_experts}) must match W.shape[0] ({W.shape[0]})"
     M_total, N_grad = dY.shape
-    N_total, K = W.shape
-    N = N_total // num_experts
-    assert N_grad == N, f"Grad_output N ({N_grad}) must match weight N ({N})"
+    _, N, K = W.shape[1]
+    assert N_grad == N, f"Grad_output N ({N_grad}) must match N ({N})"
 
     assert M_total % topk == 0, (
         f"M_total ({M_total}) must be divisible by topk ({topk})"
@@ -390,9 +395,7 @@ def grouped_gemm_dX(
         dtype = dY.dtype
     dX = torch.zeros(output_shape, device=dY.device, dtype=dtype)
 
-    NUM_SMS = torch.cuda.get_device_properties(
-        "cuda"
-    ).multi_processor_count  # if not debug else 1
+    NUM_SMS = torch.cuda.get_device_properties("cuda").multi_processor_count
 
     def grid(META):
         return (NUM_SMS,)
@@ -494,14 +497,17 @@ def grouped_gemm_dW(
     """
     assert not fuse_mul_pre, "fuse_mul_pre not supported"
     assert not fuse_mul_post, "fuse_mul_post not supported"
-    NUM_SMS = (
-        torch.cuda.get_device_properties("cuda").multi_processor_count
-        if not debug
-        else 1
-    )
-    X = X.view(-1, X.shape[-1]).contiguous()
-    dY = dY.contiguous()
-    m_sizes = m_sizes.contiguous()
+
+    assert X.is_cuda
+    assert dY.device == X.device
+    assert m_sizes.device == X.device
+    assert s.dtype in [torch.int32, torch.int64]
+    assert X.is_contiguous()
+    assert dY.is_contiguous()
+    assert m_sizes.is_contiguous()
+    assert X.ndim == 2
+    assert dY.ndim == 2
+    assert m_sizes.ndim == 1
 
     # Preconditions
     assert not (permute_x and permute_y), "Cannot permute both X and Y"
@@ -552,6 +558,8 @@ def grouped_gemm_dW(
         BLOCK_SIZE_M = min(total_tokens, BLOCK_SIZE_M)
         BLOCK_SIZE_N = min(N, BLOCK_SIZE_N)
         BLOCK_SIZE_K = min(K, BLOCK_SIZE_K)
+
+    NUM_SMS = torch.cuda.get_device_properties("cuda").multi_processor_count
 
     def grid(META):
         return (NUM_SMS,)

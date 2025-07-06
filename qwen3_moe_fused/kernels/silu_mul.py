@@ -99,7 +99,14 @@ def _DWf_DW_dfg_kernel(
 class SiluMul(torch.autograd.Function):
     @staticmethod
     def forward(ctx, e, g):
+        assert e.is_cuda
+        assert g.device == e.device
+        assert e.is_contiguous()
+        assert g.is_contiguous()
+        assert g.numel() == e.numel()
+
         ctx.save_for_backward(e, g)
+
         n_elements = e.numel()
         h = torch.empty_like(e)
         grid = lambda META: (triton.cdiv(n_elements, META["BLOCK_SIZE"]),)
@@ -109,6 +116,16 @@ class SiluMul(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_h):
         e, g = ctx.saved_tensors
+
+        assert e.is_cuda
+        assert g.device == e.device
+        assert grad_h.device == e.device
+        assert e.is_contiguous()
+        assert g.is_contiguous()
+        assert grad_h.is_contiguous()
+        assert g.numel() == e.numel()
+        assert grad_h.numel() == e.numel()
+
         n_elements = e.numel()
         # e, g are modified in place to grad_e, grad_g
         grid = lambda META: (triton.cdiv(n_elements, META["BLOCK_SIZE"]),)
