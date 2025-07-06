@@ -54,14 +54,7 @@ def moe_fused_linear_grouped_gemm(
     # It's possible to reuse m_sizes in multiple MoeFusedLinear layers that use the same selected_experts,
     # but for now we recompute it for clarity
     m_sizes = get_expert_counts(selected_experts, weight.shape[0])
-
-    return grouped_gemm(
-        X=input,
-        W=weight,
-        m_sizes=m_sizes,
-        topk=1,  # Not used
-        autotune=True,
-    )
+    return grouped_gemm(input, weight, m_sizes, autotune=True)
 
 
 def moe_fused_linear(input: torch.Tensor, weight: torch.Tensor, selected_experts: torch.Tensor) -> torch.Tensor:

@@ -5,7 +5,13 @@ from math import sqrt
 
 import torch
 
-from qwen3_moe_fused.functional import _moe_fused_linear_naive_fwd, moe_fused_linear
+from qwen3_moe_fused.functional import _moe_fused_linear_naive_fwd
+from qwen3_moe_fused.grouped_gemm.interface import grouped_gemm_forward
+from qwen3_moe_fused.grouped_gemm.kernels_masked.forward import (
+    grouped_gemm_masked_forward,
+)
+from qwen3_moe_fused.kernels.indexing import get_expert_counts
+from test_quantize import get_rtol_atol
 
 
 os.environ["TRITON_PRINT_AUTOTUNING"] = "1"
@@ -36,13 +42,20 @@ def main():
     selected_experts = torch.randint(0, num_experts, (batch_size,), device=device, dtype=torch.int32)
     # Assume selected_experts is sorted
     selected_experts, _ = torch.sort(selected_experts)
+    m_sizes = get_expert_counts(selected_experts, num_experts)
 
     output_naive = _moe_fused_linear_naive_fwd(input, weight, selected_experts)
     print("output_naive", output_naive.shape, output_naive.dtype)
 
-    output_grouped_gemm = moe_fused_linear(input, weight, selected_experts)
+    output_grouped_gemm = grouped_gemm_forward(input, weight, m_sizes, autotune=True)
     print("output_grouped_gemm", output_grouped_gemm.shape, output_grouped_gemm.dtype)
     print(torch.allclose(output_grouped_gemm, output_naive, rtol=rtol, atol=atol))
+    print(get_rtol_atol(output_grouped_gemm, output_naive))
+
+    output_grouped_gemm_masked = grouped_gemm_masked_forward(input, weight, m_sizes)
+    print("output_grouped_gemm_masked", output_grouped_gemm_masked.shape, output_grouped_gemm_masked.dtype)
+    print(torch.allclose(output_grouped_gemm_masked, output_naive, rtol=rtol, atol=atol))
+    print(get_rtol_atol(output_grouped_gemm_masked, output_naive))
 
 
 if __name__ == "__main__":

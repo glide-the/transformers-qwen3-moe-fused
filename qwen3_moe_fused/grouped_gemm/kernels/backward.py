@@ -64,6 +64,7 @@ def _grouped_gemm_dX_kernel(
     USE_TMA_LOAD_W: tl.constexpr = False,
     USE_TMA_LOAD_dY: tl.constexpr = False,
     USE_TMA_STORE: tl.constexpr = False,
+    acc_dtype: tl.constexpr = tl.float32,
     FLATTEN: tl.constexpr = True,
 ) -> None:
     TOTAL_TOKENS: tl.constexpr = NUM_TOKENS * TOPK
@@ -207,7 +208,7 @@ def _grouped_gemm_dX_kernel(
                 # col_mask = offs_bk[None, :] < K
                 store_mask = row_mask  # & col_mask
 
-                accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_K), dtype=tl.float32)
+                accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_K), dtype=acc_dtype)
 
                 # GEMM main loop
                 for n_offset in range(0, N, BLOCK_SIZE_N):

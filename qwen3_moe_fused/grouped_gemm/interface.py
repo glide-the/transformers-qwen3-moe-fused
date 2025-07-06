@@ -85,8 +85,9 @@ def log_kernel_info(
 def grouped_gemm_forward(
     X: torch.Tensor,
     W: torch.Tensor,
-    topk: int,
     m_sizes: torch.Tensor,
+    *,
+    topk: int = 1,
     gather_indices: torch.Tensor = None,
     topk_weights: torch.Tensor = None,
     # Fusions
@@ -101,8 +102,8 @@ def grouped_gemm_forward(
     BLOCK_SIZE_K: int = 32,
     num_warps: int = 4,
     num_stages: int = 2,
-    use_tma_load_w: bool = False,
     use_tma_load_x: bool = False,
+    use_tma_load_w: bool = False,
     use_tma_store: bool = False,
     # software pipelining -- set to True for now, won't impact until loop is re-written
     flatten: bool = True,
@@ -289,24 +290,31 @@ def grouped_gemm_forward(
 def grouped_gemm_dX(
     dY: torch.Tensor,
     W: torch.Tensor,
-    gather_indices: torch.Tensor,
     m_sizes: torch.Tensor,
-    topk: int,
+    *,
+    topk: int = 1,
+    gather_indices: torch.Tensor = None,
+    # Fusions
+    permute_x: bool = False,
+    permute_y: bool = False,
+    fuse_mul_pre: bool = False,
+    fuse_mul_post: bool = False,
+    # Autotuning - manual kernel params will be ignored if autotune is True
+    autotune: bool = False,
+    # Kernel tuning params if not autotuning -- NOTE: these params need to be tuned, otherwise performance will be poor
     BLOCK_SIZE_M: int = 32,
     BLOCK_SIZE_N: int = 32,
     BLOCK_SIZE_K: int = 32,
-    debug: bool = False,
-    permute_x: bool = False,
-    permute_y: bool = False,
-    use_tma_load_w: bool = False,
-    use_tma_load_dy: bool = False,
-    use_tma_store: bool = False,
     num_warps: int = 4,
     num_stages: int = 2,
+    use_tma_load_dy: bool = False,
+    use_tma_load_w: bool = False,
+    use_tma_store: bool = False,
+    # software pipelining -- set to True for now, won't impact until loop is re-written
     flatten: bool = True,
-    fuse_mul_pre: bool = False,
-    fuse_mul_post: bool = False,
-    autotune: bool = False,
+    # debugging
+    debug: bool = False,
+    # Output dtype
     dtype: torch.dtype = None,
 ) -> torch.Tensor:
     """
@@ -458,22 +466,28 @@ def grouped_gemm_dW(
     X: torch.Tensor,
     dY: torch.Tensor,
     m_sizes: torch.Tensor,
-    gather_indices: torch.Tensor,
-    topk: int,
+    *,
+    topk: int = 1,
+    gather_indices: torch.Tensor = None,
+    # Fusions
+    permute_x: bool = False,
+    permute_y: bool = False,
+    fuse_mul_pre: bool = False,
+    fuse_mul_post: bool = False,
+    # Autotuning - manual kernel params will be ignored if autotune is True
+    autotune: bool = False,
+    # Kernel tuning params if not autotuning -- NOTE: these params need to be tuned, otherwise performance will be poor
     BLOCK_SIZE_M: int = 32,
     BLOCK_SIZE_N: int = 32,
     BLOCK_SIZE_K: int = 32,
-    permute_x: bool = False,
-    permute_y: bool = False,
-    use_tma_load_dy: bool = False,
-    use_tma_load_x: bool = False,
-    use_tma_store: bool = False,
-    fuse_mul_pre: bool = False,
-    fuse_mul_post: bool = False,
     num_warps: int = 4,
     num_stages: int = 2,
+    use_tma_load_x: bool = False,
+    use_tma_load_dy: bool = False,
+    use_tma_store: bool = False,
+    # software pipelining -- set to True for now, won't impact until loop is re-written
     flatten: bool = True,
-    autotune: bool = False,
+    # debugging
     debug: bool = False,
     dtype: torch.dtype = None,
 ) -> torch.Tensor:
@@ -640,16 +654,17 @@ class GroupedGemm(torch.autograd.Function):
         X,
         W,
         m_sizes,
+        *,
         topk,
         gather_indices,
+        topk_weights,
         permute_x,
         permute_y,
-        topk_weights,
         fuse_mul_post,
+        autotune,
         kernel_config_fwd,
         kernel_config_bwd_dX,
         kernel_config_bwd_dW,
-        autotune,
         dX_only,
         dW_only,
     ):
@@ -657,10 +672,10 @@ class GroupedGemm(torch.autograd.Function):
         ctx.permute_x = permute_x
         ctx.permute_y = permute_y
         ctx.fuse_mul_post = fuse_mul_post
+        ctx.autotune = autotune
         ctx.kernel_config_fwd = kernel_config_fwd
         ctx.kernel_config_bwd_dX = kernel_config_bwd_dX
         ctx.kernel_config_bwd_dW = kernel_config_bwd_dW
-        ctx.autotune = autotune
         ctx.dX_only = dX_only
         ctx.dW_only = dW_only
 
@@ -681,8 +696,8 @@ class GroupedGemm(torch.autograd.Function):
         return grouped_gemm_forward(
             X=X,
             W=W,
-            topk=topk,
             m_sizes=m_sizes,
+            topk=topk,
             gather_indices=gather_indices,
             topk_weights=topk_weights,
             permute_x=permute_x,
@@ -701,9 +716,9 @@ class GroupedGemm(torch.autograd.Function):
         permute_x = ctx.permute_x
         permute_y = ctx.permute_y
         fuse_mul_post = ctx.fuse_mul_post
+        autotune = ctx.autotune
         kernel_config_bwd_dX = ctx.kernel_config_bwd_dX
         kernel_config_bwd_dW = ctx.kernel_config_bwd_dW
-        autotune = ctx.autotune
         dX_only = ctx.dX_only
         dW_only = ctx.dW_only
 
@@ -787,16 +802,16 @@ class GroupedGemm(torch.autograd.Function):
             dX,
             dW,
             None,  # m_sizes
-            None,  # gather_indices
             None,  # topk
+            None,  # gather_indices
+            None,  # topk_weights
             None,  # permute_x
             None,  # permute_y
-            None,  # topk_weights
             None,  # fuse_mul_post
+            None,  # autotune
             None,  # kernel_config_fwd
             None,  # kernel_config_bwd_dX
             None,  # kernel_config_bwd_dW
-            None,  # autotune
             None,  # dX_only
             None,  # dW_only
         )
@@ -880,16 +895,17 @@ def grouped_gemm(
     X: torch.Tensor,
     W: torch.Tensor,
     m_sizes: torch.Tensor,
-    topk: int,
+    *,
+    topk: int = 1,
     gather_indices: torch.Tensor = None,
+    topk_weights: torch.Tensor = None,
     permute_x: bool = False,
     permute_y: bool = False,
-    topk_weights=None,
-    fuse_mul_post=False,
+    fuse_mul_post: bool = False,
+    autotune: bool = False,
     kernel_config_fwd: KernelConfigForward = None,
     kernel_config_bwd_dX: KernelConfigBackward_dX = None,
     kernel_config_bwd_dW: KernelConfigBackward_dW = None,
-    autotune: bool = False,
     is_first_gemm: bool = True,
     # Only for debugging
     dX_only: bool = False,
@@ -910,13 +926,12 @@ def grouped_gemm(
     m_sizes: tokens assigned to each expert which correspond to the size of M in the respective GEMMs in the grouped GEMM.
     gather_indices: (total_tokens,) indices of tokens assigned to each expert.  E.g., slicing gather_indices by cumsum of m_sizes gives the indices of tokens assigned to each expert. Needed when either `permute_x` or `permute_y` is True.
     topk_weights: (total_tokens,) weights to multiply routed output by in expert MLP calculation, used only when `fuse_mul` is True (see note on `fuse_mul`).
+    autotune: whether to autotune the kernel, if yes, kernel_config_fwd, kernel_config_bwd_dX, and kernel_config_bwd_dW will be ignored.
     kernel_config_fwd: KernelConfigForward for forward pass.
     kernel_config_bwd_dX: KernelConfigBackward_dX for backward pass of dX.
     kernel_config_bwd_dW: KernelConfigBackward_dW for backward pass of dW.
-    autotune: whether to autotune the kernel, if yes, kernel_config_fwd, kernel_config_bwd_dX, and kernel_config_bwd_dW will be ignored.
     is_first_gemm: whether this is the first grouped GEMM in an MoE MLP.  This is needed to check whether kernel configs are valid.  `permute_x` should only be used for first gemm; `permute_y` should only be used for second gemm.
     This will impact whether TMA can be used for loading and storing.
-
     """
     if not autotune:
         assert kernel_config_fwd is not None, (
