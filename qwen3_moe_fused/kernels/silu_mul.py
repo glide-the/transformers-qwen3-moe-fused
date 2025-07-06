@@ -26,7 +26,7 @@ def _fg_kernel(
     g,
     h,
     n_elements,
-    BLOCK_SIZE: tl.constexpr,
+    BLOCK_SIZE: tl.constexpr = 128,
 ):
     block_idx = tl.program_id(0)
     offsets = block_idx * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
@@ -55,7 +55,7 @@ def _DWf_DW_dfg_kernel(
     e,
     g,
     n_elements,
-    BLOCK_SIZE: tl.constexpr,
+    BLOCK_SIZE: tl.constexpr = 128,
 ):
     """
     e = e.float()

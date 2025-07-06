@@ -11,12 +11,12 @@ import triton
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_M_BLOCK_SIZES = [64, 128]
-DEFAULT_N_BLOCK_SIZES = [64, 128, 256]
-DEFAULT_K_BLOCK_SIZES = [64, 128, 256]
-DEFAULT_NUM_CTAS = 1
+DEFAULT_M_BLOCK_SIZES = [16, 32, 64, 128, 256]
+DEFAULT_N_BLOCK_SIZES = [16, 32, 64, 128, 256]
+DEFAULT_K_BLOCK_SIZES = [16, 32, 64, 128, 256]
+DEFAULT_NUM_CTAS = [1]
 DEFAULT_NUM_WARPS = [4, 8]
-DEFAULT_NUM_STAGES = [3, 4, 5]
+DEFAULT_NUM_STAGES = [3, 4, 5, 6]
 BOOLS = [True, False]
 
 
@@ -187,34 +187,34 @@ def get_dW_kernel_configs(
     BLOCK_M=DEFAULT_M_BLOCK_SIZES,
     BLOCK_N=DEFAULT_N_BLOCK_SIZES,
     BLOCK_K=DEFAULT_K_BLOCK_SIZES,
+    TMA_LOAD_dY=True,
+    TMA_LOAD_X=True,
+    TMA_STORE=False,  # NOTE: TMA_STORE is disabled for now
     num_warps=DEFAULT_NUM_WARPS,
     num_stages=DEFAULT_NUM_STAGES,
     num_ctas=DEFAULT_NUM_CTAS,
-    TMA_LOAD_dY=True,
-    TMA_LOAD_X=True,
-    TMA_STORE=False,
 ):
     (
         BLOCK_M,
         BLOCK_N,
         BLOCK_K,
-        num_warps,
-        num_stages,
-        num_ctas,
         TMA_LOAD_dY,
         TMA_LOAD_X,
         TMA_STORE,
+        num_warps,
+        num_stages,
+        num_ctas,
     ) = convert_args_to_list(
         [
             BLOCK_M,
             BLOCK_N,
             BLOCK_K,
-            num_warps,
-            num_stages,
-            num_ctas,
             TMA_LOAD_dY,
             TMA_LOAD_X,
             TMA_STORE,
+            num_warps,
+            num_stages,
+            num_ctas,
         ]
     )
     kernel_configs = []
@@ -279,7 +279,7 @@ def exceeds_smem_capacity(
     BLOCK_SIZE_K: int,
     dtype: torch.dtype,
     smem_size: int,
-    slack: float = 50000,
+    slack: int = 0,
 ):
     smem_reqs = estimate_smem_reqs(
         num_stages, BLOCK_SIZE_M, BLOCK_SIZE_N, BLOCK_SIZE_K, dtype
@@ -299,19 +299,37 @@ def common_prune_criteria(config: triton.Config, kwargs: dict, dtype):
     BLOCK_SIZE_K = config.kwargs["BLOCK_SIZE_K"]
 
     num_tokens = kwargs["NUM_TOKENS"]
+    N = kwargs["N"]
+    K = kwargs["K"]
     num_experts = kwargs["NUM_EXPERTS"]
     permute_x = kwargs["PERMUTE_X"]
     permute_y = kwargs["PERMUTE_Y"]
     tokens_per_expert = num_tokens // num_experts
 
     # use_tma = [k for k in config.kwargs.keys() if k.startswith("USE_TMA_")]
-    MIN_BLOCK_SIZE_M = DEFAULT_M_BLOCK_SIZES[0]
     if exceeds_smem_capacity(
         num_stages, BLOCK_SIZE_M, BLOCK_SIZE_N, BLOCK_SIZE_K, dtype, smem_size
     ):
         return True
-    if BLOCK_SIZE_M > tokens_per_expert * 2 and tokens_per_expert > MIN_BLOCK_SIZE_M:
+
+    max_block_size_M = max(tokens_per_expert * 2, DEFAULT_M_BLOCK_SIZES[0])
+    if BLOCK_SIZE_M > max_block_size_M:
         return True
+    if BLOCK_SIZE_N > N:
+        return True
+    if BLOCK_SIZE_K > K:
+        return True
+
+    min_block_size_M = min(triton.next_power_of_2(max_block_size_M // 2 + 1), 64)
+    min_block_size_N = min(triton.next_power_of_2(N // 2 + 1), 64)
+    min_block_size_K = min(triton.next_power_of_2(K // 2 + 1), 64)
+    if BLOCK_SIZE_M * BLOCK_SIZE_N < min_block_size_M * min_block_size_N:
+        return True
+    if BLOCK_SIZE_M * BLOCK_SIZE_K < min_block_size_M * min_block_size_K:
+        return True
+    if BLOCK_SIZE_N * BLOCK_SIZE_K < min_block_size_N * min_block_size_K:
+        return True
+
     if permute_x and permute_y:
         return True
     # if not supports_tma() and any(use_tma):
