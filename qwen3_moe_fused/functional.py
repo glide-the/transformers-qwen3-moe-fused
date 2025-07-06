@@ -1,7 +1,6 @@
 import torch
 
-from .gemv.interface import moe_fused_linear_gemv
-from .grouped_gemm.interface import grouped_gemm
+from .grouped_gemm.kernels_masked.interface import grouped_gemm
 from .kernels.indexing import get_expert_counts
 
 
@@ -48,15 +47,6 @@ def _moe_fused_linear_naive_bwd_weight(
     return grad_weight
 
 
-def moe_fused_linear_grouped_gemm(
-    input: torch.Tensor, weight: torch.Tensor, selected_experts: torch.Tensor
-) -> torch.Tensor:
-    # It's possible to reuse m_sizes in multiple MoeFusedLinear layers that use the same selected_experts,
-    # but for now we recompute it for clarity
-    m_sizes = get_expert_counts(selected_experts, weight.shape[0])
-    return grouped_gemm(input, weight, m_sizes, autotune=True)
-
-
 def moe_fused_linear(input: torch.Tensor, weight: torch.Tensor, selected_experts: torch.Tensor) -> torch.Tensor:
     """
     Computes a MoE linear operation using grouped GEMM for large matrices, or GEMV for small matrices.
@@ -73,9 +63,7 @@ def moe_fused_linear(input: torch.Tensor, weight: torch.Tensor, selected_experts
     Returns:
         output (`torch.FloatTensor`): output tensor of shape `(batch_size, out_features)`.
     """
-    batch_size, in_features = input.shape
-    num_experts, out_features, _ = weight.shape
-    if in_features % 16 != 0 or out_features % 16 != 0:
-        return moe_fused_linear_gemv(input, weight, selected_experts)
-    else:
-        return moe_fused_linear_grouped_gemm(input, weight, selected_experts)
+    # It's possible to reuse m_sizes in multiple MoeFusedLinear layers that use the same selected_experts,
+    # but for now we recompute it for clarity
+    m_sizes = get_expert_counts(selected_experts, weight.shape[0])
+    return grouped_gemm(input, weight, m_sizes)

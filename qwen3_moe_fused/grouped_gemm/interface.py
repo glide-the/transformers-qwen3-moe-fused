@@ -347,7 +347,7 @@ def grouped_gemm_dX(
     assert dY.is_cuda
     assert W.device == dY.device
     assert m_sizes.device == dY.device
-    assert m_sizes in [torch.int32, torch.int64]
+    assert m_sizes.dtype in [torch.int32, torch.int64]
     assert dY.is_contiguous()
     assert W.is_contiguous()
     assert m_sizes.is_contiguous()
@@ -380,7 +380,7 @@ def grouped_gemm_dX(
     num_experts = m_sizes.shape[0]
     assert num_experts == W.shape[0], f"num_experts ({num_experts}) must match W.shape[0] ({W.shape[0]})"
     M_total, N_grad = dY.shape
-    _, N, K = W.shape[1]
+    _, N, K = W.shape
     assert N_grad == N, f"Grad_output N ({N_grad}) must match N ({N})"
 
     assert M_total % topk == 0, (
@@ -515,7 +515,7 @@ def grouped_gemm_dW(
     assert X.is_cuda
     assert dY.device == X.device
     assert m_sizes.device == X.device
-    assert s.dtype in [torch.int32, torch.int64]
+    assert m_sizes.dtype in [torch.int32, torch.int64]
     assert X.is_contiguous()
     assert dY.is_contiguous()
     assert m_sizes.is_contiguous()

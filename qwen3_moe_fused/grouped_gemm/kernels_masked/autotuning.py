@@ -51,17 +51,9 @@ def _common_prune_criteria(config, kwargs):
     BLOCK_SIZE_M = config.kwargs["BLOCK_SIZE_M"]
     BLOCK_SIZE_N = config.kwargs["BLOCK_SIZE_N"]
     BLOCK_SIZE_K = config.kwargs["BLOCK_SIZE_K"]
-
-    if "x_ptr" in kwargs:
-        dtype = kwargs["x_ptr"].dtype
-    elif "w_ptr" in kwargs:
-        dtype = kwargs["w_ptr"].dtype
-    else:
-        raise NotImplementedError
-
+    dtype = kwargs["x_ptr"].dtype
     device_properties = _get_device_properties()
     smem_size = device_properties["max_shared_mem"]
-
     if _exceeds_smem_capacity(num_stages, BLOCK_SIZE_M, BLOCK_SIZE_N, BLOCK_SIZE_K, dtype, smem_size):
         return True
 

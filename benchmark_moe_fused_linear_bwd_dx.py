@@ -8,9 +8,9 @@ from math import sqrt
 import torch
 import triton
 
-from qwen3_moe_fused.grouped_gemm.interface import grouped_gemm_forward
-from qwen3_moe_fused.grouped_gemm.kernels_masked.forward import (
-    grouped_gemm_forward as grouped_gemm_forward_masked,
+from qwen3_moe_fused.grouped_gemm.interface import grouped_gemm_dX
+from qwen3_moe_fused.grouped_gemm.kernels_masked.forward_transposed import (
+    grouped_gemm_forward_transposed,
 )
 from qwen3_moe_fused.kernels.indexing import get_expert_counts
 
@@ -18,8 +18,8 @@ from qwen3_moe_fused.kernels.indexing import get_expert_counts
 os.environ["TRITON_PRINT_AUTOTUNING"] = "1"
 
 providers = {
-    "grouped_gemm": partial(grouped_gemm_forward, autotune=True),
-    "grouped_gemm_masked": grouped_gemm_forward_masked,
+    "grouped_gemm": partial(grouped_gemm_dX, autotune=True),
+    "grouped_gemm_masked": grouped_gemm_forward_transposed,
 }
 provider_names = list(providers)
 
@@ -33,7 +33,7 @@ provider_names = list(providers)
             line_vals=provider_names,
             line_names=provider_names,
             ylabel="GFLOPS",
-            plot_name="moe_fused_linear",
+            plot_name="moe_fused_linear_bwd_dx",
             args={},
         )
     ]
@@ -47,19 +47,19 @@ def benchmark(N, provider):
     device = "cuda"
     dtype = torch.bfloat16
 
-    input = torch.randn(N, in_features, device=device, dtype=dtype)
     weight = 1 / sqrt(in_features) * torch.randn(num_experts, out_features, in_features, device=device, dtype=dtype)
     selected_experts = torch.randint(0, num_experts, (N,), device=device, dtype=torch.int32)
     # Assume selected_experts is sorted
     selected_experts, _ = torch.sort(selected_experts)
     m_sizes = get_expert_counts(selected_experts, num_experts)
+    grad_output = torch.randn(N, out_features, device=device, dtype=dtype)
 
     quantiles = [0.5, 0.2, 0.8]
     ms, min_ms, max_ms = triton.testing.do_bench(
-        lambda: providers[provider](input, weight, m_sizes), quantiles=quantiles
+        lambda: providers[provider](grad_output, weight, m_sizes), quantiles=quantiles
     )
 
-    del input, weight, selected_experts, m_sizes
+    del weight, selected_experts, m_sizes, grad_output
     gc.collect()
     torch.cuda.empty_cache()
 
