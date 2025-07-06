@@ -6,7 +6,14 @@ import torch
 import triton
 import triton.language as tl
 
+from .autotuning import get_autotune_configs, prune_configs
 
+
+@triton.autotune(
+    configs=get_autotune_configs(),
+    prune_configs_by={"early_config_prune": prune_configs},
+    key=["N", "K"],
+)
 @triton.jit
 def _grouped_gemm_masked_forward_kernel(
     # Pointers
@@ -15,9 +22,10 @@ def _grouped_gemm_masked_forward_kernel(
     m_sizes_ptr,
     y_ptr,
     # Dimensions
-    NUM_EXPERTS,
+    M,
     N,
     K,
+    NUM_EXPERTS,
     NUM_SMS,
     # Strides
     stride_xm,
@@ -28,9 +36,9 @@ def _grouped_gemm_masked_forward_kernel(
     stride_ym,
     stride_yn,
     # Metadata
-    BLOCK_SIZE_M: tl.constexpr = 32,
-    BLOCK_SIZE_N: tl.constexpr = 16,
-    BLOCK_SIZE_K: tl.constexpr = 128,
+    BLOCK_SIZE_M: tl.constexpr = 64,
+    BLOCK_SIZE_N: tl.constexpr = 64,
+    BLOCK_SIZE_K: tl.constexpr = 64,
 ) -> None:
     tidx = tl.program_id(0)
     m_end = 0
@@ -120,9 +128,10 @@ def grouped_gemm_masked_forward(
         m_sizes,
         y,
         # Dimensions
-        E,
+        M,
         N,
         K,
+        E,
         NUM_SMS,
         # Strides
         x.stride(0),
