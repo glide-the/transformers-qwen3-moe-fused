@@ -1,7 +1,6 @@
 import json
 import os
 import re
-from collections.abc import Iterable
 from typing import Optional, Union
 
 import safetensors.torch
@@ -34,7 +33,7 @@ def load_sharded_state_dict(save_directory: os.PathLike) -> TStateDict:
 
 
 def convert_state_dict_to_fused_(
-    state_dict: TStateDict, *, key_prefix: str, param_names: Iterable[str], num_hidden_layers: int, num_experts: int
+    state_dict: TStateDict, *, key_prefix: str, param_names: list[str], num_hidden_layers: int, num_experts: int
 ) -> None:
     if not key_prefix and "layers.0.mlp.experts.0.down_proj.weight" not in state_dict.keys():
         key_prefix = "model."
@@ -53,7 +52,7 @@ def convert_state_dict_to_fused_(
 
 
 def convert_state_dict_to_unfused_(
-    state_dict: TStateDict, *, key_prefix: str, param_names: Iterable[str], num_hidden_layers: int, num_experts: int
+    state_dict: TStateDict, *, key_prefix: str, param_names: list[str], num_hidden_layers: int, num_experts: int
 ) -> None:
     if not key_prefix and "layers.0.mlp.down_proj.weight" not in state_dict.keys():
         key_prefix = "model."
@@ -83,7 +82,11 @@ def convert_model_to_fused(
     convert_state_dict_to_fused_(
         state_dict,
         key_prefix="",
-        param_names=["down_proj", "gate_proj", "up_proj"],
+        param_names=[
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+        ],
         num_hidden_layers=config.num_hidden_layers,
         num_experts=config.num_experts,
     )
@@ -106,7 +109,11 @@ def convert_model_to_unfused(
     convert_state_dict_to_unfused_(
         state_dict,
         key_prefix="",
-        param_names=["down_proj", "gate_proj", "up_proj"],
+        param_names=[
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+        ],
         num_hidden_layers=config.num_hidden_layers,
         num_experts=config.num_experts,
     )
@@ -136,12 +143,12 @@ def convert_lora_to_fused(
         state_dict,
         key_prefix="base_model.model.",
         param_names=[
-            "down_proj.lora_A",
-            "down_proj.lora_B",
             "gate_proj.lora_A",
             "gate_proj.lora_B",
             "up_proj.lora_A",
             "up_proj.lora_B",
+            "down_proj.lora_A",
+            "down_proj.lora_B",
         ],
         num_hidden_layers=num_hidden_layers,
         num_experts=num_experts,
@@ -171,12 +178,12 @@ def convert_lora_to_unfused(
         state_dict,
         key_prefix="base_model.model.",
         param_names=[
-            "down_proj.lora_A",
-            "down_proj.lora_B",
             "gate_proj.lora_A",
             "gate_proj.lora_B",
             "up_proj.lora_A",
             "up_proj.lora_B",
+            "down_proj.lora_A",
+            "down_proj.lora_B",
         ],
         num_hidden_layers=num_hidden_layers,
         num_experts=num_experts,
@@ -186,3 +193,84 @@ def convert_lora_to_unfused(
     config.save_pretrained(out_dir)
     model_path = os.path.join(out_dir, "adapter_model.safetensors")
     safetensors.torch.save_file(state_dict, model_path)
+
+
+def convert_optimizer_state_to_fused(
+    in_dir: os.PathLike,
+    out_dir: os.PathLike,
+    *,
+    num_hidden_layers: int = 48,
+    num_experts: int = 128,
+    keys_need_fuse: Optional[list[str]] = None,
+    keys_no_need_fuse: Optional[list[str]] = None,
+) -> None:
+    if keys_need_fuse is None:
+        keys_need_fuse = [
+            "gate_proj.lora_A",
+            "gate_proj.lora_B",
+            "up_proj.lora_A",
+            "up_proj.lora_B",
+            "down_proj.lora_A",
+            "down_proj.lora_B",
+        ]
+    if keys_no_need_fuse is None:
+        keys_no_need_fuse = [
+            "q_proj.lora_A",
+            "q_proj.lora_B",
+            "k_proj.lora_A",
+            "k_proj.lora_B",
+            "v_proj.lora_A",
+            "v_proj.lora_B",
+            "o_proj.lora_A",
+            "o_proj.lora_B",
+        ]
+
+    print(f"Loading {in_dir}")
+    state_path = os.path.join(in_dir, "optimizer.pt")
+    state_dict_old = torch.load(state_path, map_location="cpu")
+    num_keys_old = (len(keys_no_need_fuse) + len(keys_need_fuse) * num_experts) * num_hidden_layers
+    assert len(state_dict_old["state"]) == num_keys_old
+
+    print("Converting...")
+    state_dict_new = {
+        "state": {},
+        "param_groups": [],
+    }
+    state_dict_new["param_groups"] = state_dict_old["param_groups"]
+    num_keys_new = (len(keys_no_need_fuse) + len(keys_need_fuse)) * num_hidden_layers
+    state_dict_new["param_groups"][0]["params"] = list(range(num_keys_new))
+
+    key_idx_old = 0
+    key_idx_new = 0
+    for _ in tqdm(range(num_hidden_layers)):
+        for _ in range(len(keys_no_need_fuse)):
+            state_dict_new["state"][key_idx_new] = state_dict_old["state"][key_idx_old]
+            key_idx_old += 1
+            key_idx_new += 1
+        for param_idx in range(len(keys_need_fuse)):
+            quant_state_new = {}
+            for attr in ["step", "qmap1", "qmap2"]:
+                # No need to fuse the attr
+                _key_idx_old = key_idx_old + param_idx
+                quant_state_new[attr] = state_dict_old["state"][_key_idx_old][attr]
+            for attr in ["state1", "state2", "absmax1", "absmax2"]:
+                # Fuse the attr
+                tensors = []
+                for expert_idx in range(num_experts):
+                    _key_idx_old = key_idx_old + len(keys_need_fuse) * expert_idx + param_idx
+                    tensors.append(state_dict_old["state"][_key_idx_old][attr])
+                if attr.startswith("state"):
+                    tensors = torch.stack(tensors)
+                else:
+                    tensors = torch.cat(tensors)
+                quant_state_new[attr] = tensors
+            state_dict_new["state"][key_idx_new] = quant_state_new
+            key_idx_new += 1
+        key_idx_old += len(keys_need_fuse) * num_experts
+    assert key_idx_old == num_keys_old
+    assert key_idx_new == num_keys_new
+
+    print(f"Saving {out_dir}")
+    os.makedirs(out_dir, exist_ok=True)
+    state_path = os.path.join(out_dir, "optimizer.pt")
+    torch.save(state_dict_new, state_path)
