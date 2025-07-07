@@ -33,12 +33,31 @@ def load_sharded_state_dict(save_directory: os.PathLike) -> TStateDict:
     return state_dict
 
 
-def convert_state_dict_to_fused_(
-    state_dict: TStateDict, *, key_prefix: str, param_names: list[str], num_hidden_layers: int, num_experts: int
-) -> None:
-    if not key_prefix and "layers.0.mlp.experts.0.down_proj.weight" not in state_dict.keys():
-        key_prefix = "model."
+def find_key_prefix(state_dict: TStateDict, *, is_fused: bool) -> str:
+    if is_fused:
+        key_base = "layers.0.mlp.down_proj.weight"
+        key_base_lora = "layers.0.mlp.down_proj.lora_A.weight"
+    else:
+        key_base = "layers.0.mlp.experts.0.down_proj.weight"
+        key_base_lora = "layers.0.mlp.experts.0.down_proj.lora_A.weight"
 
+    for key_prefix in [
+        "",
+        "model.",
+        "model.model.",
+        "base_model.",
+        "base_model.model.",
+        "base_model.model.model.",
+    ]:
+        if key_prefix + key_base in state_dict or key_prefix + key_base_lora in state_dict:
+            return key_prefix
+    raise RuntimeError("Key prefix not found.")
+
+
+def convert_state_dict_to_fused_(
+    state_dict: TStateDict, *, param_names: list[str], num_hidden_layers: int, num_experts: int
+) -> None:
+    key_prefix = find_key_prefix(state_dict, is_fused=False)
     for layer_idx in range(num_hidden_layers):
         print(f"Layer {layer_idx}/{num_hidden_layers}")
         for param_name in param_names:
@@ -53,11 +72,9 @@ def convert_state_dict_to_fused_(
 
 
 def convert_state_dict_to_unfused_(
-    state_dict: TStateDict, *, key_prefix: str, param_names: list[str], num_hidden_layers: int, num_experts: int
+    state_dict: TStateDict, *, param_names: list[str], num_hidden_layers: int, num_experts: int
 ) -> None:
-    if not key_prefix and "layers.0.mlp.down_proj.weight" not in state_dict.keys():
-        key_prefix = "model."
-
+    key_prefix = find_key_prefix(state_dict, is_fused=True)
     for layer_idx in range(num_hidden_layers):
         print(f"Layer {layer_idx}/{num_hidden_layers}")
         for param_name in param_names:
@@ -82,7 +99,6 @@ def convert_model_to_fused(
     print("Converting...")
     convert_state_dict_to_fused_(
         state_dict,
-        key_prefix="",
         param_names=[
             "gate_proj",
             "up_proj",
@@ -109,7 +125,6 @@ def convert_model_to_unfused(
     print("Converting...")
     convert_state_dict_to_unfused_(
         state_dict,
-        key_prefix="",
         param_names=[
             "gate_proj",
             "up_proj",
@@ -133,16 +148,16 @@ def convert_lora_to_fused(
     model_path = os.path.join(in_dir, "adapter_model.safetensors")
     state_dict = safetensors.torch.load_file(model_path)
 
-    pattern = r"base_model\.model\.layers\.\d+\.mlp\.experts\.0\.down_proj\.lora_A\.weight"
-    num_hidden_layers = len([x for x in state_dict.keys() if re.compile(pattern).fullmatch(x)])
-    pattern = r"base_model\.model\.layers\.0\.mlp\.experts\.\d+\.down_proj\.lora_A\.weight"
-    num_experts = len([x for x in state_dict.keys() if re.compile(pattern).fullmatch(x)])
+    key_prefix = find_key_prefix(state_dict, is_fused=False)
+    pattern = key_prefix + r"layers\.\d+\.mlp\.experts\.0\.down_proj\.lora_A\.weight"
+    num_hidden_layers = len([x for x in state_dict if re.compile(pattern).fullmatch(x)])
+    pattern = key_prefix + r"layers\.0\.mlp\.experts\.\d+\.down_proj\.lora_A\.weight"
+    num_experts = len([x for x in state_dict if re.compile(pattern).fullmatch(x)])
     print("num_hidden_layers", num_hidden_layers, "num_experts", num_experts)
 
     print("Converting...")
     convert_state_dict_to_fused_(
         state_dict,
-        key_prefix="base_model.model.",
         param_names=[
             "gate_proj.lora_A",
             "gate_proj.lora_B",
@@ -169,15 +184,15 @@ def convert_lora_to_unfused(
     model_path = os.path.join(in_dir, "adapter_model.safetensors")
     state_dict = safetensors.torch.load_file(model_path)
 
-    pattern = r"base_model\.model\.layers\.\d+\.mlp\.down_proj\.lora_A\.weight"
-    num_hidden_layers = len([x for x in state_dict.keys() if re.compile(pattern).fullmatch(x)])
-    num_experts = state_dict["base_model.model.layers.0.mlp.down_proj.lora_A.weight"].shape[0]
+    key_prefix = find_key_prefix(state_dict, is_fused=True)
+    pattern = key_prefix + r"layers\.\d+\.mlp\.down_proj\.lora_A\.weight"
+    num_hidden_layers = len([x for x in state_dict if re.compile(pattern).fullmatch(x)])
+    num_experts = state_dict[key_prefix + "layers.0.mlp.down_proj.lora_A.weight"].shape[0]
     print("num_hidden_layers", num_hidden_layers, "num_experts", num_experts)
 
     print("Converting...")
     convert_state_dict_to_unfused_(
         state_dict,
-        key_prefix="base_model.model.",
         param_names=[
             "gate_proj.lora_A",
             "gate_proj.lora_B",
