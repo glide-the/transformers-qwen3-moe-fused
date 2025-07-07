@@ -142,7 +142,7 @@ class LoraMoeFusedLinear(nn.Module, LoraLayer):
 
 
 # Dirty patch in case a package generates a LoraConfig and we cannot access it
-def patch_lora_config():
+def patch_lora_config(*, rank_pattern: Optional[dict[str, int]] = None) -> None:
     from peft import LoraConfig
 
     old_init = LoraConfig.__init__
@@ -150,5 +150,8 @@ def patch_lora_config():
     def new_init(self, *args, **kwargs):
         old_init(self, *args, **kwargs)
         self._register_custom_module({MoeFusedLinear: LoraMoeFusedLinear})
+        if rank_pattern is not None:
+            self.rank_pattern = rank_pattern
+        print("Patched LoraConfig:", self)
 
     LoraConfig.__init__ = new_init

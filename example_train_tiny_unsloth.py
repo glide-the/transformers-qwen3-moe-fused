@@ -27,13 +27,26 @@ os.environ["TRITON_PRINT_AUTOTUNING"] = "1"
 
 def main():
     patch_bnb_quantizer()
-    patch_lora_config()
+    # We can set a smaller rank for MoE layers
+    # With rslora, we don't need to set a different alpha for them
+    # TODO: Support rank_pattern in Unsloth
+    patch_lora_config(
+        rank_pattern={
+            "q_proj": 16,
+            "k_proj": 16,
+            "v_proj": 16,
+            "o_proj": 16,
+            "gate": 16,
+            "gate_proj": 4,
+            "up_proj": 4,
+            "down_proj": 4,
+        }
+    )
 
     model_dir = "./pretrained/qwen-moe-tiny-lm-quantized"
 
     model, tokenizer = FastModel.from_pretrained(model_dir, auto_model=Qwen3MoeFusedForCausalLM)
 
-    # TODO: Support rank_pattern in Unsloth
     model = FastModel.get_peft_model(
         model,
         target_modules=[
