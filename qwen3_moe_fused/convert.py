@@ -3,6 +3,7 @@ import os
 import re
 from typing import Optional, Union
 
+import bitsandbytes
 import safetensors.torch
 import torch
 from huggingface_hub.serialization import save_torch_state_dict
@@ -225,9 +226,13 @@ def convert_optimizer_state_to_fused(
             "o_proj.lora_B",
         ]
 
+    qmap1 = bitsandbytes.functional.create_dynamic_map(signed=True).cuda()
+    qmap2 = bitsandbytes.functional.create_dynamic_map(signed=False).cuda()
+
     print(f"Loading {in_dir}")
     state_path = os.path.join(in_dir, "optimizer.pt")
-    state_dict_old = torch.load(state_path, map_location="cpu")
+    # Quantization needs to run on GPU
+    state_dict_old = torch.load(state_path, map_location="cuda")
     num_keys_old = (len(keys_no_need_fuse) + len(keys_need_fuse) * num_experts) * num_hidden_layers
     assert len(state_dict_old["state"]) == num_keys_old
 
@@ -249,11 +254,13 @@ def convert_optimizer_state_to_fused(
             key_idx_new += 1
         for param_idx in range(len(keys_need_fuse)):
             quant_state_new = {}
-            for attr in ["step", "qmap1", "qmap2"]:
+            already_quantized = "qmap1" in state_dict_old["state"][key_idx_old + param_idx]
+            for attr in ["step", "qmap1", "qmap2"] if already_quantized else ["step"]:
                 # No need to fuse the attr
                 _key_idx_old = key_idx_old + param_idx
                 quant_state_new[attr] = state_dict_old["state"][_key_idx_old][attr]
-            for attr in ["state1", "state2", "absmax1", "absmax2"]:
+
+            for attr in ["state1", "state2", "absmax1", "absmax2"] if already_quantized else ["state1", "state2"]:
                 # Fuse the attr
                 tensors = []
                 for expert_idx in range(num_experts):
@@ -264,6 +271,20 @@ def convert_optimizer_state_to_fused(
                 else:
                     tensors = torch.cat(tensors)
                 quant_state_new[attr] = tensors
+
+            if not already_quantized and quant_state_new["state1"].numel() >= 4096:
+                quant_state_new["qmap1"] = qmap1
+                quant_state_new["state1"], _quant_state = bitsandbytes.functional.quantize_blockwise(
+                    quant_state_new["state1"], code=qmap1, blocksize=256, nested=False
+                )
+                quant_state_new["absmax1"] = _quant_state.absmax
+
+                quant_state_new["qmap2"] = qmap2
+                quant_state_new["state2"], _quant_state = bitsandbytes.functional.quantize_blockwise(
+                    quant_state_new["state2"], code=qmap2, blocksize=256, nested=False
+                )
+                quant_state_new["absmax2"] = _quant_state.absmax
+
             state_dict_new["state"][key_idx_new] = quant_state_new
             key_idx_new += 1
         key_idx_old += len(keys_need_fuse) * num_experts
