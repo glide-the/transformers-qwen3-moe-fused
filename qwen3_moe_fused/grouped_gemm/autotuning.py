@@ -11,6 +11,8 @@ DEFAULT_K_BLOCK_SIZES = [16, 32, 64, 128, 256]
 DEFAULT_NUM_WARPS = [4, 8]
 DEFAULT_NUM_STAGES = [3, 4, 5, 6]
 
+NUM_SMS = torch.cuda.get_device_properties("cuda").multi_processor_count
+
 
 def get_autotune_configs() -> list[triton.Config]:
     configs = []

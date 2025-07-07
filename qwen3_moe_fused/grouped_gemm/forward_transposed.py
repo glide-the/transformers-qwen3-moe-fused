@@ -6,7 +6,7 @@ import torch
 import triton
 import triton.language as tl
 
-from .autotuning import get_autotune_configs, prune_configs
+from .autotuning import NUM_SMS, get_autotune_configs, prune_configs
 
 
 @triton.autotune(
@@ -119,7 +119,6 @@ def grouped_gemm_forward_transposed(
     if dtype is None:
         dtype = x.dtype
     y = torch.empty((M, N), device=x.device, dtype=dtype)
-    NUM_SMS = torch.cuda.get_device_properties("cuda").multi_processor_count
     grid = lambda META: (NUM_SMS,)
     _grouped_gemm_forward_transposed_kernel[grid](
         # Pointers

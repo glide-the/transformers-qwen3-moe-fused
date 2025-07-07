@@ -4,7 +4,7 @@ import torch
 import triton
 import triton.language as tl
 
-from .autotuning import get_autotune_configs, prune_configs
+from .autotuning import NUM_SMS, get_autotune_configs, prune_configs
 
 
 @triton.autotune(
@@ -102,7 +102,6 @@ def grouped_gemm_backward_dw(
     E = m_sizes.numel()
 
     w = torch.zeros((E, N, K), device=x.device, dtype=dtype)
-    NUM_SMS = torch.cuda.get_device_properties("cuda").multi_processor_count
     grid = lambda META: (NUM_SMS,)
     _grouped_gemm_backward_dw_kernel[grid](
         # Pointers
