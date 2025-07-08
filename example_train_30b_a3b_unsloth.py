@@ -29,7 +29,7 @@ def main():
             "k_proj": 16,
             "v_proj": 16,
             "o_proj": 16,
-            "gate": 16,
+            # "gate": 16,  # It's possible to create a LoRA on the routing gate, but this is unstable
             "gate_proj": 4,
             "up_proj": 4,
             "down_proj": 4,
@@ -47,7 +47,7 @@ def main():
             "k_proj",
             "v_proj",
             "o_proj",
-            "gate",
+            # "gate",
             "gate_proj",
             "up_proj",
             "down_proj",
@@ -68,7 +68,7 @@ def main():
         weight_decay=1e-3,  # For MoE models, weight decay can be smaller than dense models
         num_train_epochs=1,
         lr_scheduler_type="linear",
-        warmup_steps=10,
+        warmup_steps=1000,
         logging_steps=1,
         save_steps=100,
         save_total_limit=5,
