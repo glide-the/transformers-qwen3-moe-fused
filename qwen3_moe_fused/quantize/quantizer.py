@@ -19,7 +19,7 @@ logger = logging.get_logger(__name__)
 
 # Modified from https://github.com/huggingface/transformers/blob/508a7040556dc6b45f09174c662a9632284b2445/src/transformers/integrations/bitsandbytes.py#L150
 def _replace_with_bnb_moe_fused_linear(
-    model,
+    model: nn.Module,
     modules_to_not_convert: list[str],
     current_key_name: list[str],
     quantization_config: BitsAndBytesConfig,
@@ -108,27 +108,28 @@ def replace_with_bnb_moe_fused_linear(
     return model
 
 
-def patch_bnb_quantizer():
-    def _process_model_before_weight_loading(
-        self,
-        model: PreTrainedModel,
-        device_map: Union[str, dict[str, Any]],
-        keep_in_fp32_modules: Optional[list[str]] = None,
-        **kwargs,
-    ) -> None:
-        self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.llm_int8_skip_modules, keep_in_fp32_modules
-        )
+def _process_model_before_weight_loading(
+    self: Bnb4BitHfQuantizer,
+    model: PreTrainedModel,
+    device_map: Union[str, dict[str, Any]],
+    keep_in_fp32_modules: Optional[list[str]] = None,
+    **kwargs,
+) -> None:
+    self.modules_to_not_convert = self.get_modules_to_not_convert(
+        model, self.quantization_config.llm_int8_skip_modules, keep_in_fp32_modules
+    )
 
-        # Extend `self.modules_to_not_convert` to keys that are supposed to be offloaded to `cpu` or `disk`
-        if isinstance(device_map, dict) and len(device_map.keys()) > 1:
-            keys_on_cpu = [key for key, value in device_map.items() if value in ["disk", "cpu"]]
-            self.modules_to_not_convert.extend(keys_on_cpu)
+    # Extend `self.modules_to_not_convert` to keys that are supposed to be offloaded to `cpu` or `disk`
+    if isinstance(device_map, dict) and len(device_map) > 1:
+        keys_on_cpu = [key for key, value in device_map.items() if value in ["disk", "cpu"]]
+        self.modules_to_not_convert.extend(keys_on_cpu)
 
-        replace_with_bnb_moe_fused_linear(
-            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
-        )
+    replace_with_bnb_moe_fused_linear(
+        model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
+    )
 
-        model.config.quantization_config = self.quantization_config
+    model.config.quantization_config = self.quantization_config
 
+
+def patch_bnb_quantizer() -> None:
     Bnb4BitHfQuantizer._process_model_before_weight_loading = _process_model_before_weight_loading

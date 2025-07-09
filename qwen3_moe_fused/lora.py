@@ -4,6 +4,7 @@ import math
 from typing import Optional, Union
 
 import torch
+from peft import LoraConfig
 from peft.tuners.lora.layer import LoraLayer
 from torch import nn
 
@@ -87,7 +88,7 @@ class LoraMoeFusedLinear(nn.Module, LoraLayer):
         if init_lora_weights is False:
             return
 
-        if adapter_name in self.lora_A.keys():
+        if adapter_name in self.lora_A:
             if init_lora_weights is True:
                 # initialize A the same way as the default for nn.Linear and B to zero
                 moe_fused_kaiming_uniform_(self.lora_A[adapter_name].weight)
@@ -141,10 +142,7 @@ class LoraMoeFusedLinear(nn.Module, LoraLayer):
         return "lora." + rep
 
 
-# Dirty patch in case a package generates a LoraConfig and we cannot access it
 def patch_lora_config(*, rank_pattern: Optional[dict[str, int]] = None) -> None:
-    from peft import LoraConfig
-
     old_init = LoraConfig.__init__
 
     def new_init(self, *args, **kwargs):
@@ -152,6 +150,5 @@ def patch_lora_config(*, rank_pattern: Optional[dict[str, int]] = None) -> None:
         self._register_custom_module({MoeFusedLinear: LoraMoeFusedLinear})
         if rank_pattern is not None:
             self.rank_pattern = rank_pattern
-        print("Patched LoraConfig:", self)
 
     LoraConfig.__init__ = new_init
