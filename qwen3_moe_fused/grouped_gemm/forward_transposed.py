@@ -7,6 +7,7 @@ import triton
 import triton.language as tl
 
 from .autotuning import NUM_SMS, get_autotune_configs, prune_configs
+from .forward import is_int_tensor
 
 
 @triton.autotune(
@@ -104,7 +105,7 @@ def grouped_gemm_forward_transposed(
     assert x.is_cuda
     assert w.device == x.device
     assert m_sizes.device == x.device
-    assert m_sizes.dtype in [torch.int32, torch.int64]
+    assert is_int_tensor(m_sizes)
     assert x.is_contiguous()
     assert w.is_contiguous()
     assert m_sizes.is_contiguous()

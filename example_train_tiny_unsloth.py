@@ -9,6 +9,7 @@
 # after https://github.com/unslothai/unsloth-zoo/blob/362fb45ee5906052bf09a43f1052c578159069ac/unsloth_zoo/compiler.py#L1283
 # See https://github.com/unslothai/unsloth/issues/2874
 
+
 import os
 
 from unsloth import FastModel
@@ -17,6 +18,7 @@ from unsloth import FastModel
 from datasets import Dataset
 from trl import SFTConfig, SFTTrainer
 
+from qwen3_moe_fused.fast_lora import patch_Qwen3MoeFusedSparseMoeBlock_forward
 from qwen3_moe_fused.lora import patch_lora_config
 from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedForCausalLM
 from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
@@ -42,6 +44,7 @@ def main():
             "down_proj": 4,
         }
     )
+    patch_Qwen3MoeFusedSparseMoeBlock_forward()
 
     model_dir = "./pretrained/qwen-moe-tiny-lm-quantized"
 

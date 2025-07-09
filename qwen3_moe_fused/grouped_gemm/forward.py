@@ -98,13 +98,23 @@ def _grouped_gemm_forward_kernel(
             processed_tiles += num_tiles_per_expert
 
 
+def is_int_tensor(x: torch.Tensor) -> bool:
+    return x.dtype in {
+        torch.uint8,
+        torch.int8,
+        torch.int16,
+        torch.int32,
+        torch.int64,
+    }
+
+
 def grouped_gemm_forward(
     x: torch.Tensor, w: torch.Tensor, m_sizes: torch.Tensor, dtype: Optional[torch.dtype] = None
 ) -> torch.Tensor:
     assert x.is_cuda
     assert w.device == x.device
     assert m_sizes.device == x.device
-    assert m_sizes.dtype in [torch.int32, torch.int64]
+    assert is_int_tensor(m_sizes)
     assert x.is_contiguous()
     assert w.is_contiguous()
     assert m_sizes.is_contiguous()

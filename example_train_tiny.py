@@ -3,6 +3,7 @@
 # Example to train a tiny model
 # Run example_create_tiny.py first
 
+
 import os
 
 from datasets import Dataset
@@ -10,11 +11,9 @@ from peft import LoraConfig, get_peft_model
 from transformers import AutoTokenizer
 from trl import SFTConfig, SFTTrainer
 
-from qwen3_moe_fused.lora import LoraMoeFusedLinear
-from qwen3_moe_fused.modular_qwen3_moe_fused import (
-    MoeFusedLinear,
-    Qwen3MoeFusedForCausalLM,
-)
+from qwen3_moe_fused.fast_lora import patch_Qwen3MoeFusedSparseMoeBlock_forward
+from qwen3_moe_fused.lora import patch_lora_config
+from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedForCausalLM
 from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
 
 
@@ -23,6 +22,8 @@ os.environ["TRITON_PRINT_AUTOTUNING"] = "1"
 
 def main():
     patch_bnb_quantizer()
+    patch_lora_config()
+    patch_Qwen3MoeFusedSparseMoeBlock_forward()
 
     model_dir = "./pretrained/qwen-moe-tiny-lm"
 
@@ -55,7 +56,6 @@ def main():
         lora_alpha=1,
         use_rslora=True,
     )
-    lora_config._register_custom_module({MoeFusedLinear: LoraMoeFusedLinear})
     model = get_peft_model(model, lora_config)
 
     dataset = Dataset.from_dict({"text": [x * 100 for x in "abcdefghijkl"]})

@@ -59,6 +59,8 @@ class MoeFusedLinear(nn.Module):
         return f"in_features={self.in_features}, out_features={self.out_features}, num_experts={self.num_experts}"
 
 
+# This class follows the implementation in HF Transformers
+# patch_Qwen3MoeFusedSparseMoeBlock_forward can make it faster
 class Qwen3MoeFusedSparseMoeBlock(nn.Module):
     def __init__(self, config: Qwen3MoeConfig) -> None:
         super().__init__()
@@ -82,9 +84,6 @@ class Qwen3MoeFusedSparseMoeBlock(nn.Module):
         # router_logits: (M, num_experts)
         router_logits = self.gate(hidden_states)
 
-        # TODO: Fuse softmax and topk, see:
-        # https://github.com/triton-lang/triton/blob/0b1cf48fff3fb7a7d884005d7a8f61b56c4cfd3b/main/python/triton_kernels/triton_kernels/routing.py
-        # https://huggingface.co/kernels-community/moe/blob/main/moe/topk_softmax_kernels.cu
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float32)
         # routing_weights, selected_experts: (M, num_selected)
         routing_weights, selected_experts = torch.topk(routing_weights, self.num_selected, dim=-1)

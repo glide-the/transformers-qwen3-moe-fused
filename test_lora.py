@@ -2,6 +2,7 @@
 #
 # Run test_model.py first
 
+
 import os
 
 import torch
@@ -9,9 +10,8 @@ from peft import LoraConfig, PeftModel, get_peft_model
 from transformers import Qwen3MoeModel, set_seed
 
 from qwen3_moe_fused.convert import convert_lora_to_fused, convert_lora_to_unfused
-from qwen3_moe_fused.lora import LoraMoeFusedLinear
+from qwen3_moe_fused.lora import patch_lora_config
 from qwen3_moe_fused.modular_qwen3_moe_fused import (
-    MoeFusedLinear,
     Qwen3MoeFusedModel,
     moe_fused_kaiming_uniform_,
 )
@@ -22,6 +22,8 @@ os.environ["TRITON_PRINT_AUTOTUNING"] = "1"
 
 
 def main():
+    patch_lora_config()
+
     model_dir = "./pretrained/qwen-moe-tiny"
     lora_dir = "./pretrained/qwen-moe-tiny-lora"
     model_fused_dir = "./pretrained/qwen-moe-tiny-fused"
@@ -62,7 +64,6 @@ def main():
         lora_alpha=1,
         use_rslora=True,
     )
-    lora_config._register_custom_module({MoeFusedLinear: LoraMoeFusedLinear})
 
     model = Qwen3MoeModel.from_pretrained(model_dir, device_map=device, torch_dtype=dtype)
     model = get_peft_model(model, lora_config)
@@ -70,18 +71,14 @@ def main():
     # lora_B.weight is inited to zeros. For testing, we make it non-zero
     for name, param in model.named_parameters():
         if name.endswith("lora_B.default.weight"):
-            print("Init", name)
+            # print("Init", name)
             moe_fused_kaiming_uniform_(param)
 
     model.save_pretrained(lora_dir)
 
     convert_lora_to_fused(lora_dir, lora_fused_dir)
     model_fused = Qwen3MoeFusedModel.from_pretrained(model_fused_dir, device_map=device, torch_dtype=dtype)
-    # Explicitly pass `config=lora_config`, because `adapter_config.json` in `lora_fused_dir` does not save
-    # `_register_custom_module({MoeFusedLinear: LoraMoeFusedLinear})`
-    model_fused = PeftModel.from_pretrained(
-        model_fused, lora_fused_dir, config=lora_config, device_map=device, torch_dtype=dtype
-    )
+    model_fused = PeftModel.from_pretrained(model_fused, lora_fused_dir, device_map=device, torch_dtype=dtype)
 
     convert_lora_to_unfused(lora_fused_dir, lora_roundtrip_dir)
     model_roundtrip = Qwen3MoeModel.from_pretrained(model_roundtrip_dir, device_map=device, torch_dtype=dtype)

@@ -18,11 +18,11 @@ I aim to keep the code readable and easy to follow. I only used the most mature 
 
 The LoRA for the fused linear layer is define by first creating a LoRA for the linear layer in each expert, then stack them along the experts dimension. For the weight tensor with shape `(num_experts, out_features, in_features)`, the two LoRA weights have shape `lora_A: (num_experts, lora_rank, in_features), lora_B: (num_experts, out_features, lora_rank)`. Therefore, a previously trained LoRA can be converted to the fused format.
 
-The functions in [`convert.py`](https://github.com/woct0rdho/transformers-qwen3-moe-fused/blob/master/qwen3_moe_fused/convert.py) can convert a model or a LoRA between the fused and the unfused format. After you train a LoRA in the fused format, you can first convert it to the unfused format, then convert it to other formats such as GGUF.
+The functions in [`qwen3_moe_fused/convert.py`](https://github.com/woct0rdho/transformers-qwen3-moe-fused/blob/master/qwen3_moe_fused/convert.py) can convert a model or a LoRA between the fused and the unfused format. After you train a LoRA in the fused format, you can convert it to the unfused format, then convert it to other formats such as GGUF.
 
 ### TODO
 
-* Support [fast LoRA](https://github.com/unslothai/unsloth/blob/91598a6ee8ecda6dbaa2c9fd1ea9c75719da54a6/unsloth/kernels/fast_lora.py) in Unsloth
+* Fuse 4-bit dequant and MoE linear, see [`qwen3_moe_fused/quantize/layer.py`](https://github.com/woct0rdho/transformers-qwen3-moe-fused/blob/master/qwen3_moe_fused/quantize/layer.py)
 * Try to upstream to Transformers or Unsloth. If you want to help with this, please open an issue.
 
 ### License

@@ -16,7 +16,9 @@ from ..modular_qwen3_moe_fused import MoeFusedLinear
 # TODO: Fuse this
 def moe_fused_linear_4bit(input: torch.Tensor, weight: Params4bit, m_sizes: torch.Tensor) -> torch.Tensor:
     assert not weight.requires_grad
-    weight = dequantize_4bit(weight, weight.quant_state)
+    # Cast weight to input.dtype
+    # The grouped GEMM kernels use float32 accumulator
+    weight = dequantize_4bit(weight, weight.quant_state).to(input.dtype)
     return moe_fused_linear(input, weight, m_sizes)
 
 

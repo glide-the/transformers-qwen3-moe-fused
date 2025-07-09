@@ -10,6 +10,7 @@ from unsloth import FastModel
 from datasets import load_dataset
 from trl import SFTConfig, SFTTrainer
 
+from qwen3_moe_fused.fast_lora import patch_Qwen3MoeFusedSparseMoeBlock_forward
 from qwen3_moe_fused.lora import patch_lora_config
 from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedForCausalLM
 from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
@@ -35,6 +36,7 @@ def main():
             "down_proj": 4,
         }
     )
+    patch_Qwen3MoeFusedSparseMoeBlock_forward()
 
     model_id = "woctordho/Qwen3-30B-A3B-fused-bnb-4bit"
 
