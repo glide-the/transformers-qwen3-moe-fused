@@ -14,8 +14,17 @@ class GroupedGemm(torch.autograd.Function):
     @staticmethod
     def backward(ctx, dy):
         x, w, m_sizes = ctx.saved_tensors
-        dx = grouped_gemm_forward_transposed(dy, w, m_sizes, x.dtype)
-        dw = grouped_gemm_backward_dw(x, dy, m_sizes, w.dtype)
+
+        if x.requires_grad:
+            dx = grouped_gemm_forward_transposed(dy, w, m_sizes, x.dtype)
+        else:
+            dx = None
+
+        if w.requires_grad:
+            dw = grouped_gemm_backward_dw(x, dy, m_sizes, w.dtype)
+        else:
+            dw = None
+
         return dx, dw, None
 
 
