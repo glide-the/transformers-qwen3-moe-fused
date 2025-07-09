@@ -27,4 +27,6 @@ The functions in [`qwen3_moe_fused/convert.py`](https://github.com/woct0rdho/tra
 
 ### License
 
-The files in `qwen3_moe_fused/grouped_gemm/` are modified from Unsloth MoE kernels so they are AGPLv3 licensed, see the [explanation](https://github.com/unslothai/unsloth/discussions/2890#discussioncomment-13675890). The rest of this repo, including files modified from Transformers, PEFT, and bitsandbytes, are Apache-2.0 licensed.
+The files in `qwen3_moe_fused/grouped_gemm/` are modified from Unsloth MoE kernels so they are AGPLv3 licensed, see the [explanation](https://github.com/unslothai/unsloth/discussions/2890#discussioncomment-13675890). For more robust and performant integration, it's possible to use the MIT licensed [triton-kernels](https://github.com/triton-lang/triton/tree/main/python/triton_kernels/triton_kernels) as an alternative.
+
+The rest of this repo, including files modified from Transformers, PEFT, and bitsandbytes, are Apache-2.0 licensed.
