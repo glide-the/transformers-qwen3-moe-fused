@@ -4,8 +4,10 @@ import os
 from math import sqrt
 
 import torch
+from bitsandbytes.functional import dequantize_nf4, quantize_nf4
 
 from qwen3_moe_fused.functional import _moe_fused_linear_naive_fwd, moe_fused_linear
+from qwen3_moe_fused.grouped_gemm.forward_4bit import grouped_gemm_forward_4bit
 from qwen3_moe_fused.kernels.indexing import get_expert_counts
 from test_quantize import get_rtol_atol
 
@@ -35,6 +37,8 @@ def main():
 
     input = torch.randn(batch_size, in_features, device=device, dtype=dtype)
     weight = 1 / sqrt(in_features) * torch.randn(num_experts, out_features, in_features, device=device, dtype=dtype)
+    weight_quant, weight_quant_state = quantize_nf4(weight, blocksize=256, compress_statistics=True)
+    weight = dequantize_nf4(weight_quant, weight_quant_state)
     selected_experts = torch.randint(0, num_experts, (batch_size,), device=device, dtype=torch.int32)
     # Assume selected_experts is sorted
     selected_experts, _ = torch.sort(selected_experts)
@@ -47,6 +51,11 @@ def main():
     print("output_grouped_gemm", output_grouped_gemm.shape, output_grouped_gemm.dtype)
     print(torch.allclose(output_grouped_gemm, output_naive, rtol=rtol, atol=atol))
     print(get_rtol_atol(output_grouped_gemm, output_naive))
+
+    output_grouped_gemm_4bit = grouped_gemm_forward_4bit(input, weight_quant, weight_quant_state, m_sizes)
+    print("output_grouped_gemm_4bit", output_grouped_gemm_4bit.shape, output_grouped_gemm_4bit.dtype)
+    print(torch.allclose(output_grouped_gemm_4bit, output_naive, rtol=rtol, atol=atol))
+    print(get_rtol_atol(output_grouped_gemm_4bit, output_naive))
 
 
 if __name__ == "__main__":

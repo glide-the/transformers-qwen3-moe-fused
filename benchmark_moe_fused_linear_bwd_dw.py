@@ -34,7 +34,9 @@ provider_names = list(providers)
     ]
 )
 def benchmark(N, provider):
-    print("N", N, "provider", provider)
+    print("N", N, "provider", provider, "begin")
+    gc.collect()
+    torch.cuda.empty_cache()
 
     in_features = 2048
     out_features = 768
@@ -54,11 +56,8 @@ def benchmark(N, provider):
         lambda: providers[provider](input, grad_output, m_sizes), quantiles=quantiles
     )
 
-    del input, selected_experts, m_sizes, grad_output
-    gc.collect()
-    torch.cuda.empty_cache()
-
     perf = lambda ms: N * out_features * in_features / ms * 1e-6
+    print("N", N, "provider", provider, "end", perf(ms))
     return perf(ms), perf(max_ms), perf(min_ms)
 
 

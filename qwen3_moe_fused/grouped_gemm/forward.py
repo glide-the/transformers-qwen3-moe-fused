@@ -6,7 +6,7 @@ import torch
 import triton
 import triton.language as tl
 
-from .autotuning import NUM_SMS, get_autotune_configs, prune_configs
+from .autotuning import get_autotune_configs, get_num_sms, prune_configs
 
 
 @triton.autotune(
@@ -22,19 +22,19 @@ def _grouped_gemm_forward_kernel(
     m_sizes_ptr,
     y_ptr,
     # Dimensions
-    M,
-    N,
-    K,
-    NUM_EXPERTS,
-    NUM_SMS,
+    M: tl.constexpr,
+    N: tl.constexpr,
+    K: tl.constexpr,
+    NUM_EXPERTS: tl.constexpr,
+    NUM_SMS: tl.constexpr,
     # Strides
-    stride_xm,
-    stride_xk,
-    stride_we,
-    stride_wn,
-    stride_wk,
-    stride_ym,
-    stride_yn,
+    stride_xm: tl.constexpr,
+    stride_xk: tl.constexpr,
+    stride_we: tl.constexpr,
+    stride_wn: tl.constexpr,
+    stride_wk: tl.constexpr,
+    stride_ym: tl.constexpr,
+    stride_yn: tl.constexpr,
     # Metadata
     BLOCK_SIZE_M: tl.constexpr = 64,
     BLOCK_SIZE_N: tl.constexpr = 64,
@@ -129,6 +129,7 @@ def grouped_gemm_forward(
     if dtype is None:
         dtype = x.dtype
     y = torch.empty((M, N), device=x.device, dtype=dtype)
+    NUM_SMS = get_num_sms()
     grid = lambda META: (NUM_SMS,)
     _grouped_gemm_forward_kernel[grid](
         # Pointers

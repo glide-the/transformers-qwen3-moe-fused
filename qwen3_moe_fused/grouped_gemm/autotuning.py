@@ -1,4 +1,3 @@
-import functools
 from itertools import product
 
 import torch
@@ -11,7 +10,9 @@ DEFAULT_K_BLOCK_SIZES = [16, 32, 64, 128, 256]
 DEFAULT_NUM_WARPS = [4, 8]
 DEFAULT_NUM_STAGES = [3, 4, 5, 6]
 
-NUM_SMS = torch.cuda.get_device_properties("cuda").multi_processor_count
+
+def get_num_sms():
+    return torch.cuda.get_device_properties("cuda").multi_processor_count
 
 
 def get_autotune_configs() -> list[triton.Config]:
@@ -29,7 +30,6 @@ def get_autotune_configs() -> list[triton.Config]:
     return configs
 
 
-@functools.cache
 def _get_device_properties():
     return triton.runtime.driver.active.utils.get_device_properties(torch.cuda.current_device())
 
