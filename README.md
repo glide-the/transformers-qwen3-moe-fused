@@ -24,10 +24,10 @@ The functions in [`qwen3_moe_fused/convert.py`](https://github.com/woct0rdho/tra
 
 * Fuse 4-bit dequant and MoE linear, see [`qwen3_moe_fused/quantize/layer.py`](https://github.com/woct0rdho/transformers-qwen3-moe-fused/blob/master/qwen3_moe_fused/quantize/layer.py). Currently I've written a kernel in [`qwen3_moe_fused/grouped_gemm/forward_4bit.py`](https://github.com/woct0rdho/transformers-qwen3-moe-fused/blob/master/qwen3_moe_fused/grouped_gemm/forward_4bit.py) but it's slower than the unfused version when the batch size is large.
 * Multi-GPU support. I don't have multiple GPUs at home so I'm not focusing on this. Maybe worth checking [OpenSloth](https://github.com/anhvth/opensloth).
-* Upstream to Transformers or Unsloth. If you have any idea how to do this, please open an issue.
+* Upstream to Transformers or Unsloth. If you have any idea how to do this, please open an issue. Transformers itself never includes Triton or CUDA kernels in the package, but they have a [HuggingFace Kernels](https://github.com/huggingface/kernels) project for them, and the [vLLM MoE kernels](https://huggingface.co/kernels-community/moe) are already there.
 
 ### License
 
-The files in `qwen3_moe_fused/grouped_gemm/` are modified from Unsloth MoE kernels so they are AGPLv3 licensed, see the [explanation](https://github.com/unslothai/unsloth/discussions/2890#discussioncomment-13675890). For more robust and performant integration, it's possible to use the MIT licensed [triton-kernels](https://github.com/triton-lang/triton/tree/main/python/triton_kernels/triton_kernels) as an alternative.
+The files in `qwen3_moe_fused/grouped_gemm/` are modified from the Unsloth MoE kernels so they are AGPLv3 licensed, see the [explanation](https://github.com/unslothai/unsloth/discussions/2890#discussioncomment-13675890). For more robust and performant integration, it's possible to use the MIT licensed [triton-kernels](https://github.com/triton-lang/triton/tree/main/python/triton_kernels/triton_kernels) as an alternative.
 
 The rest of this repo, including files modified from Transformers, PEFT, and bitsandbytes, are Apache-2.0 licensed.
