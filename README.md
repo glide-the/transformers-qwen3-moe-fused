@@ -23,7 +23,7 @@ The functions in [`qwen3_moe_fused/convert.py`](https://github.com/woct0rdho/tra
 ### TODO
 
 * Fuse 4-bit dequant and MoE linear, see [`qwen3_moe_fused/quantize/layer.py`](https://github.com/woct0rdho/transformers-qwen3-moe-fused/blob/master/qwen3_moe_fused/quantize/layer.py). Currently I've written a kernel in [`qwen3_moe_fused/grouped_gemm/forward_4bit.py`](https://github.com/woct0rdho/transformers-qwen3-moe-fused/blob/master/qwen3_moe_fused/grouped_gemm/forward_4bit.py) but it's slower than the unfused version when the batch size is large.
-* Multi-GPU support. I don't have multiple GPUs at home so I'm not focusing on this.
+* Multi-GPU support. I don't have multiple GPUs at home so I'm not focusing on this. Maybe worth checking [OpenSloth](https://github.com/anhvth/opensloth).
 * Upstream to Transformers or Unsloth. If you have any idea how to do this, please open an issue.
 
 ### License
