@@ -18,7 +18,7 @@ from .functional import moe_fused_linear
 from .kernels.indexing import get_expert_counts_and_idx
 
 
-def moe_fused_kaiming_uniform_(weight):
+def moe_fused_kaiming_uniform_(weight: torch.Tensor) -> None:
     # Kaiming uniform on in_features
     # Although Qwen's default activation is silu, we set the gain `a = sqrt(5)` following the original Linear
     in_features = weight.shape[-1]
@@ -76,7 +76,7 @@ class Qwen3MoeFusedSparseMoeBlock(nn.Module):
         self.down_proj = MoeFusedLinear(self.moe_intermediate_size, self.hidden_size, config.num_experts)
         assert config.hidden_act == "silu"
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         M = batch_size * sequence_length
 

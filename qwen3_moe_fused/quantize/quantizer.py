@@ -105,8 +105,6 @@ def replace_with_bnb_moe_fused_linear(
             " a bug."
         )
 
-    return model
-
 
 def _process_model_before_weight_loading(
     self: Bnb4BitHfQuantizer,

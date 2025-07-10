@@ -10,7 +10,9 @@ from .kernels.indexing import get_expert_counts_and_idx
 from .modular_qwen3_moe_fused import Qwen3MoeFusedSparseMoeBlock
 
 
-def get_lora_parameters(proj: nn.Module) -> tuple[nn.Parameter, Optional[QuantState], nn.Parameter, nn.Parameter]:
+def get_lora_parameters(
+    proj: nn.Module,
+) -> tuple[nn.Parameter, Optional[QuantState], nn.Parameter, nn.Parameter, float]:
     base_layer = getattr(proj, "base_layer", proj)
     W = base_layer.weight
 
@@ -36,7 +38,7 @@ def get_lora_parameters(proj: nn.Module) -> tuple[nn.Parameter, Optional[QuantSt
 
 def fast_Qwen3MoeFusedSparseMoeBlock_forward(
     self: Qwen3MoeFusedSparseMoeBlock, hidden_states: torch.Tensor
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, torch.Tensor]:
     batch_size, sequence_length, hidden_dim = hidden_states.shape
     M = batch_size * sequence_length
 

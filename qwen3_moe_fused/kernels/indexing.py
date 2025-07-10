@@ -25,7 +25,7 @@ def get_expert_counts(s: torch.Tensor, E: int) -> torch.Tensor:
 # Faster implementation of torch.sort when s is 1D and each element is an int in [0, E)
 @partial(torch.compile, fullgraph=True, mode="max-autotune-no-cudagraphs")
 @torch.no_grad()
-def sort_experts(s: torch.Tensor, E: int) -> torch.Tensor:
+def sort_experts(s: torch.Tensor, E: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     E_arange = torch.arange(E, device=s.device, dtype=s.dtype)
     compare = E_arange[:, None] == s[None, :]
     counts = compare.sum(dim=1, dtype=torch.int32)
@@ -46,7 +46,7 @@ def sort_experts(s: torch.Tensor, E: int) -> torch.Tensor:
 
 @partial(torch.compile, fullgraph=True, mode="max-autotune-no-cudagraphs")
 @torch.no_grad()
-def get_expert_counts_and_idx(s: torch.Tensor, E: int) -> torch.Tensor:
+def get_expert_counts_and_idx(s: torch.Tensor, E: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     E_arange = torch.arange(E, device=s.device, dtype=s.dtype)
     compare = E_arange[:, None] == s[None, :]
     counts = compare.sum(dim=1, dtype=torch.int32)
