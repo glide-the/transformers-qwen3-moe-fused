@@ -1,4 +1,6 @@
+import os
 from itertools import product
+from typing import Any
 
 import torch
 import triton
@@ -11,7 +13,7 @@ DEFAULT_NUM_WARPS = [4, 8]
 DEFAULT_NUM_STAGES = [3, 4, 5, 6]
 
 
-def get_num_sms():
+def get_num_sms() -> int:
     return torch.cuda.get_device_properties("cuda").multi_processor_count
 
 
@@ -30,7 +32,7 @@ def get_autotune_configs() -> list[triton.Config]:
     return configs
 
 
-def _get_device_properties():
+def _get_device_properties() -> dict[str, Any]:
     return triton.runtime.driver.active.utils.get_device_properties(torch.cuda.current_device())
 
 
@@ -42,13 +44,13 @@ def _exceeds_smem_capacity(
     dtype: torch.dtype,
     smem_size: int,
     slack: int = 0,
-):
+) -> bool:
     return (
         num_stages * BLOCK_SIZE_K * (BLOCK_SIZE_M + BLOCK_SIZE_N) + BLOCK_SIZE_M * BLOCK_SIZE_N
     ) * dtype.itemsize > smem_size + slack
 
 
-def _common_prune_criteria(config, kwargs):
+def _common_prune_criteria(config: triton.Config, kwargs: dict[str, Any]) -> bool:
     num_stages = config.num_stages
     BLOCK_SIZE_M = config.kwargs["BLOCK_SIZE_M"]
     BLOCK_SIZE_N = config.kwargs["BLOCK_SIZE_N"]
@@ -94,3 +96,11 @@ def prune_configs(configs: list[triton.Config], args, **kwargs) -> list[triton.C
             continue
         pruned_configs.append(config)
     return pruned_configs
+
+
+# We need to autotune on batch size only when benchmarking with a large range of batch sizes
+def get_autotune_keys() -> list[str]:
+    if os.getenv("AUTOTUNE_BATCH_SIZE", "0") == "1":
+        return ["M", "N", "K", "NUM_EXPERTS"]
+    else:
+        return ["N", "K", "NUM_EXPERTS"]

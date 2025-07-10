@@ -17,16 +17,16 @@ _autotune_configs = [
 
 @triton.autotune(
     configs=_autotune_configs,
-    key=["n_elements"],
+    key=[],
 )
 @triton.jit
 def _silu_mul_forward_kernel(
     e_ptr,
     g_ptr,
     h_ptr,
-    n_elements,
+    n_elements: int,
     BLOCK_SIZE: tl.constexpr = 128,
-):
+) -> None:
     block_idx = tl.program_id(0)
     offsets = block_idx * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offsets < n_elements
@@ -43,7 +43,7 @@ def _silu_mul_forward_kernel(
 
 @triton.autotune(
     configs=_autotune_configs,
-    key=["n_elements"],
+    key=[],
 )
 @triton.jit
 def _silu_mul_backward_kernel(
@@ -52,9 +52,9 @@ def _silu_mul_backward_kernel(
     g_ptr,
     de_ptr,
     dg_ptr,
-    n_elements,
+    n_elements: int,
     BLOCK_SIZE: tl.constexpr = 128,
-):
+) -> None:
     block_idx = tl.program_id(0)
     offsets = block_idx * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offsets < n_elements
@@ -78,16 +78,16 @@ def _silu_mul_backward_kernel(
 
 @triton.autotune(
     configs=_autotune_configs,
-    key=["n_elements"],
+    key=[],
 )
 @triton.jit
 def _silu_mul_backward_inplace_kernel(
     dh_ptr,
     e_ptr,
     g_ptr,
-    n_elements,
+    n_elements: int,
     BLOCK_SIZE: tl.constexpr = 128,
-):
+) -> None:
     block_idx = tl.program_id(0)
     offsets = block_idx * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offsets < n_elements

@@ -13,6 +13,7 @@ from qwen3_moe_fused.grouped_gemm.forward_4bit import grouped_gemm_forward_4bit
 from qwen3_moe_fused.kernels.indexing import get_expert_counts
 
 
+os.environ["AUTOTUNE_BATCH_SIZE"] = "1"
 os.environ["TRITON_PRINT_AUTOTUNING"] = "1"
 
 

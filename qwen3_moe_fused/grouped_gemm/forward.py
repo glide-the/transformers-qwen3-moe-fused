@@ -6,13 +6,18 @@ import torch
 import triton
 import triton.language as tl
 
-from .autotuning import get_autotune_configs, get_num_sms, prune_configs
+from .autotuning import (
+    get_autotune_configs,
+    get_autotune_keys,
+    get_num_sms,
+    prune_configs,
+)
 
 
 @triton.autotune(
     configs=get_autotune_configs(),
     prune_configs_by={"early_config_prune": prune_configs},
-    key=["M", "N", "K", "NUM_EXPERTS"],
+    key=get_autotune_keys(),
 )
 @triton.jit
 def _grouped_gemm_forward_kernel(
@@ -22,7 +27,7 @@ def _grouped_gemm_forward_kernel(
     m_sizes_ptr,
     y_ptr,
     # Dimensions
-    M: tl.constexpr,
+    M: int,
     N: tl.constexpr,
     K: tl.constexpr,
     NUM_EXPERTS: tl.constexpr,
