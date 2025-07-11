@@ -25,7 +25,7 @@ def main():
     num_experts = 128
     device = "cuda"
 
-    # For higher precision, use input_precision="ieee" in tl.dot in the kernels
+    # For higher precision, set os.environ["TRITON_F32_DEFAULT"] = "ieee"
     # dtype = torch.float32
     # rtol = 1e-6
     # atol = 1e-6

@@ -14,6 +14,7 @@ def get_batch_begins_ends(s: torch.Tensor, E: int) -> torch.Tensor:
     return s_begins_ends
 
 
+# Faster than torch.histc when each element of s is an int in [0, E)
 @partial(torch.compile, fullgraph=True, mode="max-autotune-no-cudagraphs")
 @torch.no_grad()
 def get_expert_counts(s: torch.Tensor, E: int) -> torch.Tensor:
@@ -22,7 +23,7 @@ def get_expert_counts(s: torch.Tensor, E: int) -> torch.Tensor:
     return counts
 
 
-# Faster implementation of torch.sort when s is 1D and each element is an int in [0, E)
+# Faster than torch.sort when each element of s is an int in [0, E)
 @partial(torch.compile, fullgraph=True, mode="max-autotune-no-cudagraphs")
 @torch.no_grad()
 def sort_experts(s: torch.Tensor, E: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
