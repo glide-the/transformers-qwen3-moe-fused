@@ -38,6 +38,7 @@ def main():
     )
     patch_Qwen3MoeFusedSparseMoeBlock_forward()
 
+    # This is Qwen3 2504. Nowadays you can use Qwen3 2507 for better intelligence
     model_id = "woctordho/Qwen3-30B-A3B-fused-bnb-4bit"
 
     model, tokenizer = FastModel.from_pretrained(model_id, auto_model=Qwen3MoeFusedForCausalLM)
