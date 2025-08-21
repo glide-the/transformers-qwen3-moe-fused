@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 #
-# Example to inference the fused and quantized version of Qwen3-30B-A3B
+# Example to inference the fused and quantized version of Qwen3-30B-A3B with a LoRA
+# You can replace lora_id with the local path of your trained LoRA
 
 import os
 
+from peft import PeftModel
 from transformers import AutoTokenizer
 
+from qwen3_moe_fused.lora import patch_lora_config
 from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedForCausalLM
 from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
 
@@ -15,10 +18,13 @@ os.environ["TRITON_PRINT_AUTOTUNING"] = "1"
 
 def main():
     patch_bnb_quantizer()
+    patch_lora_config()
 
     model_id = "woctordho/Qwen3-30B-A3B-fused-bnb-4bit"
+    lora_id = "woctordho/Qwen3-30B-A3B-abliterated-lora-fused"
 
     model = Qwen3MoeFusedForCausalLM.from_pretrained(model_id)
+    model = PeftModel.from_pretrained(model, lora_id)
     tokenizer = AutoTokenizer.from_pretrained(model_id)
 
     # Modified from https://huggingface.co/Qwen/Qwen3-30B-A3B/blob/main/README.md
