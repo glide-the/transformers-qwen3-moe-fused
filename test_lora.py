@@ -2,7 +2,6 @@
 #
 # Run test_model.py first
 
-
 import os
 
 import torch

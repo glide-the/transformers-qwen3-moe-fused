@@ -3,7 +3,6 @@
 # Example to train a tiny model
 # Run example_create_tiny.py first
 
-
 import os
 
 from datasets import Dataset

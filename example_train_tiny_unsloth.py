@@ -2,13 +2,6 @@
 #
 # Example to train a tiny model using Unsloth
 # Run example_create_tiny.py first
-#
-# If it shows `NameError: name 'Any' is not defined.`
-# then we need to add a line:
-# source = source.replace(": Any", "")
-# after https://github.com/unslothai/unsloth-zoo/blob/362fb45ee5906052bf09a43f1052c578159069ac/unsloth_zoo/compiler.py#L1283
-# See https://github.com/unslothai/unsloth/issues/2874
-
 
 import os
 
