@@ -4,6 +4,10 @@ import gc
 import os
 from math import sqrt
 
+
+# Set this before importing qwen3_moe_fused.grouped_gemm
+os.environ["AUTOTUNE_BATCH_SIZE"] = "1"
+
 import torch
 import triton
 
@@ -13,7 +17,6 @@ from qwen3_moe_fused.grouped_gemm.forward_transposed import (
 from qwen3_moe_fused.kernels.indexing import get_expert_counts
 
 
-os.environ["AUTOTUNE_BATCH_SIZE"] = "1"
 os.environ["TRITON_PRINT_AUTOTUNING"] = "1"
 
 providers = {
