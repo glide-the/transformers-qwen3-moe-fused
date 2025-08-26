@@ -12,7 +12,7 @@ There are already several good implementations, such as [triton-kernels](https:/
 
 The implementation in this repo is largely based on the MoE kernel in [Unsloth](https://github.com/unslothai/unsloth/blob/2bfc39b6387577457834059c59f83fcdb954c9bd/unsloth/kernels/moe), which is based on the Triton [grouped GEMM](https://triton-lang.org/main/getting-started/tutorials/08-grouped-gemm.html). I've added strides, masks, and autotune configs for small or 'thin' matrices, which are needed for LoRA.
 
-I aim to keep the code readable and easy to follow. I only used the most mature features of Triton, such as load and store, rather than things like TMA and swizzle.
+I aim to keep the code readable and easy to follow. I only used the most mature features of Triton, such as load and store, rather than things like TMA and swizzle. I've benchmarked it on RTX 3080 and it's close to the theoretical fp16 and bf16 performance.
 
 ### LoRA
 
