@@ -20,7 +20,7 @@ def main():
     patch_bnb_quantizer()
     patch_lora_config()
 
-    model_id = "woctordho/Qwen3-30B-A3B-fused-bnb-4bit"
+    model_id = "bash99/Qwen3-30B-A3B-Instruct-2507-fused-bnb-4bit"
     lora_id = "woctordho/Qwen3-30B-A3B-abliterated-lora-fused"
 
     model = Qwen3MoeFusedForCausalLM.from_pretrained(model_id)
