@@ -16,9 +16,9 @@ I aim to keep the code readable and easy to follow. I only used the most mature 
 
 ### LoRA
 
-The LoRA for the fused linear layer is defined by first creating a LoRA for the linear layer in each expert, then stack them along the experts dimension. For the weight tensor with shape `(num_experts, out_features, in_features)`, the two LoRA weights have shape `lora_A: (num_experts, lora_rank, in_features), lora_B: (num_experts, out_features, lora_rank)`. Therefore, a previously trained LoRA can be losslessly converted to the fused format.
+The LoRA for the fused linear layer is defined by first creating a LoRA for the linear layer in each expert, then stack them along the experts dimension. For the weight tensor with shape `(num_experts, out_features, in_features)`, the two LoRA weights have shape `lora_A: (num_experts, lora_rank, in_features), lora_B: (num_experts, out_features, lora_rank)`. Therefore, we can losslessly convert between the fused and the unfused formats, and a previously trained LoRA can continue to be trained.
 
-The functions in [`qwen3_moe_fused/convert.py`](https://github.com/woct0rdho/transformers-qwen3-moe-fused/blob/master/qwen3_moe_fused/convert.py) can convert a model or a LoRA between the fused and the unfused formats. After you train a LoRA in the fused format, you can convert it to the unfused format, then convert it to other formats such as GGUF.
+The functions in [`qwen3_moe_fused/convert.py`](https://github.com/woct0rdho/transformers-qwen3-moe-fused/blob/master/qwen3_moe_fused/convert.py) can convert a model or a LoRA between the fused and the unfused formats. After you train a LoRA in the fused format, you can convert it to the unfused format, then convert it to other formats such as GGUF. llama.cpp already supports this kind of LoRA. Support in vLLM is being implemented, see https://github.com/vllm-project/vllm/pull/21229
 
 ### TODO
 
