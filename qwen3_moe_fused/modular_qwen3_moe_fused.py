@@ -7,6 +7,12 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from transformers import Qwen3MoeConfig
+from transformers.cache_utils import Cache, DynamicCache
+from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
+from transformers.modeling_outputs import MoeModelOutputWithPast
+from transformers.processing_utils import Unpack
+from transformers.utils import TransformersKwargs, auto_docstring, check_model_inputs
 from transformers.models.qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
     Qwen3MoeForCausalLM,
@@ -128,12 +134,135 @@ class Qwen3MoeFusedDecoderLayer(Qwen3MoeDecoderLayer):
         else:
             self.mlp = Qwen3MoeMLP(config, intermediate_size=config.intermediate_size)
 
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        output_router_logits: bool = False,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> torch.Tensor | tuple[torch.Tensor, Optional[torch.Tensor]]:
+        residual = hidden_states
+
+        hidden_states = self.input_layernorm(hidden_states)
+
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            cache_position=cache_position,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        mlp_outputs = self.mlp(hidden_states)
+        router_logits = None
+        if isinstance(mlp_outputs, tuple):
+            hidden_states, router_logits = mlp_outputs
+        else:
+            hidden_states = mlp_outputs
+        hidden_states = residual + hidden_states
+
+        if output_router_logits:
+            return hidden_states, router_logits
+        return hidden_states
+
 
 class Qwen3MoeFusedModel(Qwen3MoeModel):
     def __init__(self, config: Qwen3MoeConfig) -> None:
         super().__init__(config)
         self.layers = nn.ModuleList(
             [Qwen3MoeFusedDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+
+    @check_model_inputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
+        causal_mask = mask_function(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
+
+        hidden_states = inputs_embeds
+
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        output_router_logits = kwargs.pop("output_router_logits", self.config.output_router_logits)
+        collected_router_logits: list[torch.Tensor] = []
+
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            if output_router_logits:
+                hidden_states, layer_router_logits = decoder_layer(
+                    hidden_states,
+                    position_embeddings=position_embeddings,
+                    attention_mask=causal_mask,
+                    position_ids=position_ids,
+                    past_key_values=past_key_values,
+                    cache_position=cache_position,
+                    output_router_logits=True,
+                    **kwargs,
+                )
+                if layer_router_logits is not None:
+                    collected_router_logits.append(layer_router_logits)
+            else:
+                hidden_states = decoder_layer(
+                    hidden_states,
+                    position_embeddings=position_embeddings,
+                    attention_mask=causal_mask,
+                    position_ids=position_ids,
+                    past_key_values=past_key_values,
+                    cache_position=cache_position,
+                    **kwargs,
+                )
+
+        hidden_states = self.norm(hidden_states)
+
+        router_logits_tuple = tuple(collected_router_logits) if collected_router_logits else None
+
+        return MoeModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+            router_logits=router_logits_tuple,
         )
 
 
