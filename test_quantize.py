@@ -31,10 +31,11 @@ def get_rtol_atol(actual, expect):
 def main():
     patch_bnb_quantizer()
 
-    model_dir = "./pretrained/qwen-moe-tiny"
-    model_quantized_dir = "./pretrained/qwen-moe-tiny-quantized"
-    model_fused_dir = "./pretrained/qwen-moe-tiny-fused"
-    model_fused_quantized_dir = "./pretrained/qwen-moe-tiny-fused-quantized"
+    # model_dir = "/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507"
+    # model_quantized_dir = "/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507-bnb-4bit"
+    model_fused_dir = "/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507-fused"
+
+    model_fused_quantized_dir = "/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507-fused-bnb-4bit"
     device = "cuda"
     dtype = torch.bfloat16
     set_seed(42)
@@ -49,30 +50,30 @@ def main():
         bnb_4bit_quant_type="nf4",
         bnb_4bit_use_double_quant=True,
     )
-    model_quantized = Qwen3MoeModel.from_pretrained(
-        model_dir, device_map=device, torch_dtype=dtype, quantization_config=bnb_config
-    )
-    model_quantized.save_pretrained(model_quantized_dir)
+    # model_quantized = Qwen3MoeModel.from_pretrained(
+    #     model_dir, device_map=device, torch_dtype=dtype, quantization_config=bnb_config
+    # )
+    # model_quantized.save_pretrained(model_quantized_dir)
 
     model_fused_quantized = Qwen3MoeFusedModel.from_pretrained(
         model_fused_dir, device_map=device, torch_dtype=dtype, quantization_config=bnb_config
     )
     model_fused_quantized.save_pretrained(model_fused_quantized_dir)
 
-    model = Qwen3MoeModel.from_pretrained(model_dir, device_map=device)
-    model_quantized = Qwen3MoeModel.from_pretrained(model_quantized_dir, device_map=device)
-    model_fused_quantized = Qwen3MoeFusedModel.from_pretrained(model_fused_quantized_dir, device_map=device)
+    # model = Qwen3MoeModel.from_pretrained(model_dir, device_map=device)
+    # model_quantized = Qwen3MoeModel.from_pretrained(model_quantized_dir, device_map=device)
+    # model_fused_quantized = Qwen3MoeFusedModel.from_pretrained(model_fused_quantized_dir, device_map=device)
 
-    input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device, dtype=torch.int32)
-    hidden = model(input_ids=input_ids).last_hidden_state
-    hidden_quantized = model_quantized(input_ids=input_ids).last_hidden_state
-    hidden_fused_quantized = model_fused_quantized(input_ids=input_ids).last_hidden_state
+    # input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device, dtype=torch.int32)
+    # hidden = model(input_ids=input_ids).last_hidden_state
+    # hidden_quantized = model_quantized(input_ids=input_ids).last_hidden_state
+    # hidden_fused_quantized = model_fused_quantized(input_ids=input_ids).last_hidden_state
     # print(hidden)
     # print(hidden_quantized)
     # print(hidden_fused_quantized)
-    print(get_rtol_atol(hidden_quantized, hidden))
-    print(get_rtol_atol(hidden_fused_quantized, hidden))
-    print(get_rtol_atol(hidden_fused_quantized, hidden_quantized))
+    # print(get_rtol_atol(hidden_quantized, hidden))
+    # print(get_rtol_atol(hidden_fused_quantized, hidden))
+    # print(get_rtol_atol(hidden_fused_quantized, hidden_quantized))
 
 
 if __name__ == "__main__":

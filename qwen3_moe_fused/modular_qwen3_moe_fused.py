@@ -12,7 +12,7 @@ from transformers.masking_utils import create_causal_mask, create_sliding_window
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 from transformers.modeling_outputs import MoeModelOutputWithPast
 from transformers.processing_utils import Unpack
-from transformers.utils import TransformersKwargs, auto_docstring, check_model_inputs
+from transformers.utils import TransformersKwargs, auto_docstring
 from transformers.models.qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
     Qwen3MoeForCausalLM,
@@ -182,7 +182,6 @@ class Qwen3MoeFusedModel(Qwen3MoeModel):
             [Qwen3MoeFusedDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
-    @check_model_inputs
     @auto_docstring
     def forward(
         self,
