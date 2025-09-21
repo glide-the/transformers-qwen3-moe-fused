@@ -28,7 +28,7 @@ def format_example(example: Dict) -> Dict:
     elif example.get("slice") == "agent":
         messages = example.get("messages", [])
         conv = ""
-        for message in messages:
+        for message in messages[:-1]:
             role = "用户" if message.get("role") == "user" else "助手"
             content = message.get("content", "")
             conv += f"{role}: {content}\n" if content else f"{role}: \n"

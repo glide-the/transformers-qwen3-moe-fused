@@ -6,10 +6,10 @@ from __future__ import annotations
 import os
 from typing import Optional
 
+from datasets import load_from_disk
 from datasets import load_dataset
 from torch.utils.data import WeightedRandomSampler
 from transformers import AutoTokenizer, DataCollatorForLanguageModeling, TrainingArguments
-from transformers.utils import has_length
 from trl import SFTTrainer
 
 from unsloth import FastLanguageModel
@@ -37,7 +37,7 @@ class SliceSFTTrainer(SFTTrainer):
             return super()._get_train_sampler(train_dataset)
 
         dataset = train_dataset if train_dataset is not None else self.train_dataset
-        if dataset is None or not has_length(dataset):
+        if dataset is None:
             return None
 
         weights = self.curriculum_sampler.get_weights()
@@ -64,8 +64,8 @@ def main() -> None:
     patch_Qwen3MoeFusedSparseMoeBlock_forward()
 
     # === Step 2. 数据准备 ===
-    imdb = load_dataset("stanfordnlp/imdb")
-    agent = load_dataset("json", data_files="agent.json")
+    imdb = load_from_disk("/media/gpt4-pdf-chatbot-langchain/transformers-qwen3-moe-fused/dataset/imdb_train")
+    agent = load_dataset("json", data_files="/media/gpt4-pdf-chatbot-langchain/transformers-qwen3-moe-fused/dataset/agent/gemini_q_glm_a_finetuning_events_1152q_1710191088.258371.json")
 
     imdb = imdb.map(slice_by_metadata)
     agent = agent.map(slice_by_metadata)
@@ -78,18 +78,18 @@ def main() -> None:
     agent = agent.remove_columns([col for col in agent["train"].column_names if col not in columns_to_keep])
 
     train_dataset = imdb["train"].concatenate(agent["train"])
-    eval_dataset = imdb.get("test")
+    # eval_dataset = imdb.get("test")
 
-    model_id = "bash99/Qwen3-30B-A3B-Instruct-2507-fused-bnb-4bit"
+    model_id = "/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507-fused-bnb-4bit"
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
     tokenized_train = train_dataset.map(tokenize_fn, fn_kwargs={"tokenizer": tokenizer}, batched=True)
-    if eval_dataset is not None:
-        tokenized_eval = eval_dataset.map(tokenize_fn, fn_kwargs={"tokenizer": tokenizer}, batched=True)
-    else:
-        tokenized_eval = None
+    # if eval_dataset is not None:
+    #     tokenized_eval = eval_dataset.map(tokenize_fn, fn_kwargs={"tokenizer": tokenizer}, batched=True)
+    # else:
+    tokenized_eval = None
 
     data_collator_lm = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 

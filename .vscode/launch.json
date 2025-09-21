@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Train 30B Model",
+        "type": "python",
+        "request": "launch",
+        "program": "${workspaceFolder}/example_train_30b_a3b_unsloth_slices.py",
+        "console": "integratedTerminal",
+        "justMyCode": false,
+        "args": [
+          "--epochs", "3",
+          "--batch_size", "8",
+          "--lr", "2e-5"
+        ]
+      }
+    ]
+  }
+  
