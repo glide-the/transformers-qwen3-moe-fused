@@ -74,10 +74,11 @@ def main() -> None:
     agent = agent.map(format_example)
 
     columns_to_keep = {"prompt", "target", "slice"}
-    imdb = imdb.remove_columns([col for col in imdb["train"].column_names if col not in columns_to_keep])
-    agent = agent.remove_columns([col for col in agent["train"].column_names if col not in columns_to_keep])
+    imdb = imdb.remove_columns([col for col in imdb.column_names if col not in columns_to_keep])
+    agent = agent.remove_columns([col for col in agent['train'].column_names if col not in columns_to_keep])
 
-    train_dataset = imdb["train"].concatenate(agent["train"])
+    from datasets import concatenate_datasets
+    train_dataset = concatenate_datasets([agent['train'], imdb])
     # eval_dataset = imdb.get("test")
 
     model_id = "/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507-fused-bnb-4bit"
