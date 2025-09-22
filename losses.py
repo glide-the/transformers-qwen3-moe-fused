@@ -21,6 +21,18 @@ def contrastive_loss(router_logits: torch.Tensor, slice_ids: Sequence[str]) -> t
     """Pull together router decisions for the same slice and push apart others."""
 
     probs = F.softmax(router_logits, dim=-1)
+
+    # Router logits may carry extra structural dimensions (e.g. groups, top-k
+    # experts).  We only care about a single representation per batch element, so
+    # fold the remaining axes into the expert dimension.  Additionally ensure
+    # there is always an explicit batch dimension to keep the pairwise
+    # similarity computation stable.
+    if probs.dim() == 1:
+        probs = probs.unsqueeze(0)
+    elif probs.dim() > 2:
+        probs = probs.reshape(probs.size(0), -1)
+
+
     sim = torch.matmul(probs, probs.T)
     loss = torch.zeros((), dtype=probs.dtype, device=probs.device)
     count = 0

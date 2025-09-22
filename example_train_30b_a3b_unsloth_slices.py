@@ -17,6 +17,7 @@ from qwen3_moe_fused.fast_lora import patch_Qwen3MoeFusedSparseMoeBlock_forward
 from qwen3_moe_fused.lora import patch_lora_config
 from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
 from slice_trainer import SliceTrainer
+from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedForCausalLM
 
 
 os.environ.setdefault("TRITON_PRINT_AUTOTUNING", "0")
@@ -63,8 +64,7 @@ def main() -> None:
         auto_model=Qwen3MoeFusedForCausalLM,
         quantization_config=quant_config,
         trust_remote_code=True,
-    )
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    ) 
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -117,6 +117,8 @@ def main() -> None:
             torch_compile_mode="max-autotune",
             report_to="none",  # You may report to Wandb
             seed=3407,
+
+            remove_unused_columns=False,
         )
 
         trainer = SliceTrainer(
