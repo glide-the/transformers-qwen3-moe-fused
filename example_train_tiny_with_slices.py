@@ -108,6 +108,7 @@ def main():
         bf16=torch.cuda.is_available(),
         optim="adamw_torch",
         report_to="none",
+        remove_unused_columns=False,
     )
 
     trainer = SliceTrainer(

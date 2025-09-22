@@ -40,6 +40,8 @@ class SliceTrainer(Trainer):
         return WeightedRandomSampler(weights, num_samples=num_samples, replacement=True)
 
     def compute_loss(self, model: torch.nn.Module, inputs: dict[str, Any], return_outputs: bool = False):
-        from losses import compute_loss
 
-        return compute_loss(model, inputs, return_outputs)
+        slice_ids = inputs.pop("slice", None)   # ✅ 取出来
+        outputs = model(**inputs)
+        from losses import compute_loss as moe_loss
+        return moe_loss(model, {**inputs, "slice_ids": slice_ids}, return_outputs)
