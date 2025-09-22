@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import os
-from typing import Optional
+from typing import Optional, Union, Any
 
+from torch import nn
+import torch
 from datasets import load_from_disk
 from datasets import load_dataset
 from torch.utils.data import WeightedRandomSampler
@@ -25,7 +27,7 @@ from qwen3_moe_fused.lora import patch_lora_config
 from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
 
 
-os.environ.setdefault("TRITON_PRINT_AUTOTUNING", "1")
+os.environ.setdefault("TRITON_PRINT_AUTOTUNING", "0")
 
 
 class SliceSFTTrainer(SFTTrainer):
@@ -49,7 +51,12 @@ class SliceSFTTrainer(SFTTrainer):
 
         return WeightedRandomSampler(weights, num_samples=len(weights), replacement=True)
 
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self,
+        model: nn.Module,
+        inputs: dict[str, Union[torch.Tensor, Any]],
+        return_outputs: bool = False,
+        num_items_in_batch: Optional[torch.Tensor] = None
+    ):
         return compute_loss_fn(model, inputs, return_outputs)
 
 
