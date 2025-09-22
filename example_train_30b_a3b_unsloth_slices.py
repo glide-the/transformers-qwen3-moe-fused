@@ -11,10 +11,10 @@ import torch
 from datasets import load_from_disk
 from datasets import load_dataset
 from torch.utils.data import WeightedRandomSampler
-from transformers import AutoTokenizer, TrainingArguments
-from trl import SFTTrainer
+from trl import SFTTrainer, SFTConfig
 from transformers import BitsAndBytesConfig
 
+from transformers import AutoTokenizer
 from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedForCausalLM
 
 from unsloth import FastModel
@@ -77,7 +77,7 @@ def main() -> None:
     imdb = imdb.map(format_example)
     agent = agent.map(format_example)
 
-    columns_to_keep = {"prompt", "target", "slice"}
+    columns_to_keep = {"text", "slice"}
     imdb = imdb.remove_columns([col for col in imdb.column_names if col not in columns_to_keep])
     agent = agent.remove_columns([col for col in agent['train'].column_names if col not in columns_to_keep])
 
@@ -93,28 +93,26 @@ def main() -> None:
         bnb_4bit_use_double_quant=True,
         bnb_4bit_compute_dtype="bfloat16",  # 或 torch.float16
     )
-
+ 
     model, tokenizer = FastModel.from_pretrained(
         model_id, 
         auto_model=Qwen3MoeFusedForCausalLM,
         quantization_config=quant_config,
         trust_remote_code=True,
     )
- 
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    train_dataset = train_dataset.map(lambda example: {"text": example["prompt"] + example["target"]})
-    text_columns = {"text", "slice"}
-    train_dataset = train_dataset.remove_columns([
-        col for col in train_dataset.column_names if col not in text_columns
-    ])
-
-    tokenized_train = train_dataset
-    tokenized_eval = None
+    # train_dataset = train_dataset.map(lambda example: {"text": example["prompt"] + example["target"]})
+    # text_columns = {"text", "slice"}
+    # train_dataset = train_dataset.remove_columns([
+    #     col for col in train_dataset.column_names if col not in text_columns
+    # ]) 
+    # tokenized_eval = None
 
     collator = SliceCollator(tokenizer, max_seq_len=256, micro_batch_size=4)
-
     def data_collator(features):
         return collator(features)
 
@@ -123,7 +121,7 @@ def main() -> None:
         (5000, {"classification": 0.4, "agent": 0.6}),
         (10000, {"classification": 0.3, "agent": 0.7}),
     ]
-    curriculum_sampler = CurriculumSampler(tokenized_train, phases)
+    curriculum_sampler = CurriculumSampler(train_dataset, phases)
     curriculum_callback = CurriculumCallback(curriculum_sampler)
 
     try: 
@@ -148,23 +146,32 @@ def main() -> None:
             random_state=3407,
         ) 
         # === Step 4. Trainer ===
-        training_args = TrainingArguments(
+        training_args = SFTConfig(
             output_dir="./moe_unsloth",
-            per_device_train_batch_size=1,
-            gradient_accumulation_steps=8,
-            learning_rate=2e-4,
+            per_device_train_batch_size=1,  # Increase batch size if you have more memory
+            gradient_accumulation_steps=1,
+            learning_rate=1e-4,
+            weight_decay=1e-3,  # For MoE models, weight decay can be smaller than dense models
             num_train_epochs=1,
-            logging_steps=10,
-            save_steps=1000,
+            lr_scheduler_type="linear",
+            warmup_steps=1000,
+            logging_steps=1,
+            save_steps=100,
+            save_total_limit=5,
             bf16=True,
-            report_to="none",
+            optim="adamw_8bit",
+            dataset_text_field="text",
+            dataset_num_proc=1,
+            torch_compile=True,
+            torch_compile_mode="max-autotune",
+            report_to="none",  # You may report to Wandb
+            seed=3407,
         )
 
         trainer = SliceSFTTrainer(
             model=model,
             processing_class=tokenizer,
-            train_dataset=tokenized_train,
-            eval_dataset=tokenized_eval,
+            train_dataset=train_dataset,
             args=training_args,
             data_collator=data_collator,
             callbacks=[curriculum_callback],

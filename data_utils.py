@@ -23,8 +23,8 @@ def format_example(example: Dict) -> Dict:
     if example.get("slice") == "classification":
         text = example["text"]
         label = str(example["label"])
-        prompt = "分类任务: 请判断以下评论的情感。\n\n评论: {text}\n\n答案:".format(text=text)
-        target = label
+        text = f"分类任务: 请判断以下评论的情感。\n\n评论: {text}\n\n答案: {label}".format(text=text, label=label)
+       
     elif example.get("slice") == "agent":
         messages = example.get("messages", [])
         conv = ""
@@ -33,16 +33,13 @@ def format_example(example: Dict) -> Dict:
             content = message.get("content", "")
             conv += f"{role}: {content}\n" if content else f"{role}: \n"
         system = example.get("system", "")
-        prompt = f"{system}\n{conv}" if system else conv
-        if messages and messages[-1].get("role") == "assistant" and messages[-1].get("content"):
-            target = messages[-1]["content"]
-        else:
-            target = ""
+        text = f"{system}\n{conv}" if system else conv
+    
     else:
         prompt = example.get("text", "")
         target = ""
 
-    return {"prompt": prompt, "target": target}
+    return {"text": text, "slice": example.get("slice")}
 
 
 def tokenize_fn(examples: Dict[str, List[str]], tokenizer, max_length: int = 512):

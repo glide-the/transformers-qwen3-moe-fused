@@ -11,7 +11,6 @@ from datasets import Dataset, DatasetDict
 from peft import LoraConfig, get_peft_model
 from torch.utils.data import WeightedRandomSampler
 from transformers import AutoTokenizer
-from transformers.utils import has_length
 from trl import SFTConfig, SFTTrainer
 
 from collators import SliceCollator
@@ -39,7 +38,7 @@ class SliceSFTTrainer(SFTTrainer):
             return super()._get_train_sampler(train_dataset)
 
         dataset = train_dataset if train_dataset is not None else self.train_dataset
-        if dataset is None or not has_length(dataset):
+        if dataset is None :
             return None
 
         weights = self.curriculum_sampler.get_weights()
@@ -76,8 +75,8 @@ def main():
     patch_bnb_quantizer()
     patch_lora_config()
     patch_Qwen3MoeFusedSparseMoeBlock_forward()
+    model_dir = "/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507-fused-bnb-4bit"
 
-    model_dir = "./pretrained/qwen-moe-tiny-lm"
 
     model = Qwen3MoeFusedForCausalLM.from_pretrained(model_dir)
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
@@ -111,8 +110,7 @@ def main():
     model = get_peft_model(model, lora_config)
 
     dataset = build_tiny_dataset()
-
-    collator = SliceCollator(tokenizer, max_seq_len=256, micro_batch_size=4)
+ 
 
     phases = [
         (1000, {"code": 0.6, "zh": 0.2, "en": 0.2}),
@@ -143,7 +141,6 @@ def main():
         train_dataset=dataset["train"],
         eval_dataset=dataset["validation"],
         args=sft_config,
-        data_collator=collator,
         compute_loss_func=compute_loss,
         callbacks=[curriculum_callback],
         curriculum_sampler=curriculum_sampler,

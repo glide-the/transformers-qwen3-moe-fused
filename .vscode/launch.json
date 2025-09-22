@@ -2,10 +2,20 @@
     "version": "0.2.0",
     "configurations": [
       {
-        "name": "Train 30B Model",
+        "name": "Train unsloth 30B Model",
         "type": "python",
         "request": "launch",
         "program": "${workspaceFolder}/example_train_30b_a3b_unsloth_slices.py",
+        "console": "integratedTerminal",
+        "justMyCode": false,
+        "args": [
+        ]
+      },
+      {
+        "name": "Train Transfrom 30B Model",
+        "type": "python",
+        "request": "launch",
+        "program": "${workspaceFolder}/example_train_tiny_with_slices.py",
         "console": "integratedTerminal",
         "justMyCode": false,
         "args": [
