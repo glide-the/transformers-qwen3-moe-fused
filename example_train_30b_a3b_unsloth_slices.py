@@ -19,7 +19,7 @@ from unsloth import FastModel
 
 from curriculum import CurriculumCallback, CurriculumSampler
 from data_utils import format_example, slice_by_metadata, tokenize_fn
-from losses import compute_loss
+from losses import compute_loss as compute_loss_fn
 from qwen3_moe_fused.fast_lora import patch_Qwen3MoeFusedSparseMoeBlock_forward
 from qwen3_moe_fused.lora import patch_lora_config
 from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
@@ -48,6 +48,9 @@ class SliceSFTTrainer(SFTTrainer):
             return super()._get_train_sampler(train_dataset)
 
         return WeightedRandomSampler(weights, num_samples=len(weights), replacement=True)
+
+    def compute_loss(self, model, inputs, return_outputs=False):
+        return compute_loss_fn(model, inputs, return_outputs)
 
 
 def main() -> None:
@@ -157,7 +160,6 @@ def main() -> None:
             eval_dataset=tokenized_eval,
             args=training_args,
             data_collator=data_collator,
-            compute_loss_func=compute_loss,
             callbacks=[curriculum_callback],
             curriculum_sampler=curriculum_sampler,
         )
