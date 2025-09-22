@@ -50,7 +50,7 @@ class SliceCollator:
             encodings = self.tokenizer(
                 texts,
                 truncation=True,
-                padding=False,
+                padding=True,
                 max_length=self.max_seq_len,
                 return_tensors="pt",
             )

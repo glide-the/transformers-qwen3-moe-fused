@@ -19,7 +19,7 @@ from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
 from slice_trainer import SliceTrainer
 
 
-os.environ.setdefault("TRITON_PRINT_AUTOTUNING", "1")
+os.environ.setdefault("TRITON_PRINT_AUTOTUNING", "0")
 
 
 def build_tiny_dataset() -> DatasetDict:
