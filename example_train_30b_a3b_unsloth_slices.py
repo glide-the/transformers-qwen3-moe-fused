@@ -11,7 +11,7 @@ import torch
 from datasets import load_from_disk
 from datasets import load_dataset
 from torch.utils.data import WeightedRandomSampler
-from transformers import AutoTokenizer, DataCollatorForLanguageModeling, TrainingArguments
+from transformers import AutoTokenizer, TrainingArguments
 from trl import SFTTrainer
 from transformers import BitsAndBytesConfig
 
@@ -19,8 +19,9 @@ from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedForCausalLM
 
 from unsloth import FastModel
 
+from collators import SliceCollator
 from curriculum import CurriculumCallback, CurriculumSampler
-from data_utils import format_example, slice_by_metadata, tokenize_fn
+from data_utils import format_example, slice_by_metadata
 from losses import compute_loss as compute_loss_fn
 from qwen3_moe_fused.fast_lora import patch_Qwen3MoeFusedSparseMoeBlock_forward
 from qwen3_moe_fused.lora import patch_lora_config
@@ -103,20 +104,19 @@ def main() -> None:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    tokenized_train = train_dataset.map(tokenize_fn, fn_kwargs={"tokenizer": tokenizer}, batched=True)
-    # if eval_dataset is not None:
-    #     tokenized_eval = eval_dataset.map(tokenize_fn, fn_kwargs={"tokenizer": tokenizer}, batched=True)
-    # else:
+    train_dataset = train_dataset.map(lambda example: {"text": example["prompt"] + example["target"]})
+    text_columns = {"text", "slice"}
+    train_dataset = train_dataset.remove_columns([
+        col for col in train_dataset.column_names if col not in text_columns
+    ])
+
+    tokenized_train = train_dataset
     tokenized_eval = None
 
-    data_collator_lm = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+    collator = SliceCollator(tokenizer, max_seq_len=256, micro_batch_size=4)
 
     def data_collator(features):
-        filtered = [
-            {key: value for key, value in feature.items() if key in {"input_ids", "attention_mask", "labels"}}
-            for feature in features
-        ]
-        return data_collator_lm(filtered)
+        return collator(features)
 
     phases = [
         (1000, {"classification": 0.5, "agent": 0.5}),
