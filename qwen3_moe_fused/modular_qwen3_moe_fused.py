@@ -14,6 +14,7 @@ from transformers.models.qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeModel,
 )
 from transformers.utils.generic import OutputRecorder
+
 from .functional import moe_fused_linear
 from .kernels.indexing import get_expert_counts_and_idx
 
