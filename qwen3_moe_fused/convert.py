@@ -65,10 +65,10 @@ def convert_state_dict_to_fused_(
             for expert_idx in tqdm(range(num_experts)):
                 key = f"{key_prefix}layers.{layer_idx}.mlp.experts.{expert_idx}.{param_name}.weight"
                 params.append(state_dict[key])
-                del state_dict[key]
+                # del state_dict[key]
             key = f"{key_prefix}layers.{layer_idx}.mlp.{param_name}.weight"
             state_dict[key] = torch.stack(params)
-            del params
+            # del params
 
 
 def convert_state_dict_to_unfused_(

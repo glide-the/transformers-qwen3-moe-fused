@@ -10,6 +10,26 @@
         "justMyCode": false,
         "args": [
         ]
+      },
+      {
+        "name": "Convert 30B Model",
+        "type": "python",
+        "request": "launch",
+        "program": "${workspaceFolder}/test_model.py",
+        "console": "integratedTerminal",
+        "justMyCode": false,
+        "args": [
+        ]
+      },
+      {
+        "name": "BNB 30B Model",
+        "type": "python",
+        "request": "launch",
+        "program": "${workspaceFolder}/test_quantize.py",
+        "console": "integratedTerminal",
+        "justMyCode": false,
+        "args": [
+        ]
       }
     ]
   }

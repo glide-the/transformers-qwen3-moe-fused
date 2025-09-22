@@ -11,8 +11,11 @@ from datasets import load_dataset
 from torch.utils.data import WeightedRandomSampler
 from transformers import AutoTokenizer, DataCollatorForLanguageModeling, TrainingArguments
 from trl import SFTTrainer
+from transformers import BitsAndBytesConfig
 
-from unsloth import FastLanguageModel
+from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedForCausalLM
+
+from unsloth import FastModel
 
 from curriculum import CurriculumCallback, CurriculumSampler
 from data_utils import format_example, slice_by_metadata, tokenize_fn
@@ -50,17 +53,7 @@ class SliceSFTTrainer(SFTTrainer):
 def main() -> None:
     # === Step 1. 打补丁 ===
     patch_bnb_quantizer()
-    patch_lora_config(
-        rank_pattern={
-            "q_proj": 16,
-            "k_proj": 16,
-            "v_proj": 16,
-            "o_proj": 16,
-            "gate_proj": 4,
-            "up_proj": 4,
-            "down_proj": 4,
-        }
-    )
+    patch_lora_config()
     patch_Qwen3MoeFusedSparseMoeBlock_forward()
 
     # === Step 2. 数据准备 ===
@@ -82,7 +75,21 @@ def main() -> None:
     # eval_dataset = imdb.get("test")
 
     model_id = "/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507-fused-bnb-4bit"
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+    quant_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_compute_dtype="bfloat16",  # 或 torch.float16
+    )
+
+    model, tokenizer = FastModel.from_pretrained(
+        model_id, 
+        auto_model=Qwen3MoeFusedForCausalLM,
+        quantization_config=quant_config,
+        trust_remote_code=True,
+    )
+ 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -109,66 +116,56 @@ def main() -> None:
     curriculum_sampler = CurriculumSampler(tokenized_train, phases)
     curriculum_callback = CurriculumCallback(curriculum_sampler)
 
-    # === Step 3. 加载模型 ===
-    model = FastLanguageModel.from_pretrained(
-        model_id,
-        load_in_4bit=True,
-        device_map="auto",
-    )
-    model = FastLanguageModel.get_peft_model(
-        model,
-        target_modules=[
-            "q_proj",
-            "k_proj",
-            "v_proj",
-            "o_proj",
-            "gate_proj",
-            "up_proj",
-            "down_proj",
-        ],
-        r=16,
-        lora_alpha=16,
-        use_rslora=True,
-        modules_to_save=None,
-        rank_pattern={
-            "q_proj": 16,
-            "k_proj": 16,
-            "v_proj": 16,
-            "o_proj": 16,
-            "gate_proj": 4,
-            "up_proj": 4,
-            "down_proj": 4,
-        },
-        use_gradient_checkpointing="unsloth",
-    )
+    try: 
 
-    # === Step 4. Trainer ===
-    training_args = TrainingArguments(
-        output_dir="./moe_unsloth",
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=8,
-        learning_rate=2e-4,
-        num_train_epochs=1,
-        logging_steps=10,
-        save_steps=1000,
-        bf16=True,
-        report_to="none",
-    )
 
-    trainer = SliceSFTTrainer(
-        model=model,
-        processing_class=tokenizer,
-        train_dataset=tokenized_train,
-        eval_dataset=tokenized_eval,
-        args=training_args,
-        data_collator=data_collator,
-        compute_loss_func=compute_loss,
-        callbacks=[curriculum_callback],
-        curriculum_sampler=curriculum_sampler,
-    )
+        model = FastModel.get_peft_model(
+            model,
+            target_modules=[
+                "q_proj",
+                "k_proj",
+                "v_proj",
+                "o_proj",
+                # "gate",
+                "gate_proj",
+                "up_proj",
+                "down_proj",
+            ],
+            r=4,
+            lora_alpha=1,
+            use_rslora=True,
+            use_gradient_checkpointing="unsloth",
+            random_state=3407,
+        ) 
+        # === Step 4. Trainer ===
+        training_args = TrainingArguments(
+            output_dir="./moe_unsloth",
+            per_device_train_batch_size=1,
+            gradient_accumulation_steps=8,
+            learning_rate=2e-4,
+            num_train_epochs=1,
+            logging_steps=10,
+            save_steps=1000,
+            bf16=True,
+            report_to="none",
+        )
 
-    trainer.train()
-
+        trainer = SliceSFTTrainer(
+            model=model,
+            processing_class=tokenizer,
+            train_dataset=tokenized_train,
+            eval_dataset=tokenized_eval,
+            args=training_args,
+            data_collator=data_collator,
+            compute_loss_func=compute_loss,
+            callbacks=[curriculum_callback],
+            curriculum_sampler=curriculum_sampler,
+        )
+        trainer.train()
+    except Exception as e:
+        import traceback
+        print("❌ 训练过程中发生异常：", str(e))
+        traceback.print_exc()
 
 if __name__ == "__main__":
     main()
