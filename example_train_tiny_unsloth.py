@@ -9,7 +9,11 @@ from unsloth import FastModel
 
 # Import unsloth before others
 from datasets import Dataset
-from trl import SFTConfig, SFTTrainer
+from transformers import (
+    DataCollatorForLanguageModeling,
+    Trainer,
+    TrainingArguments,
+)
 
 from qwen3_moe_fused.fast_lora import patch_Qwen3MoeFusedSparseMoeBlock_forward
 from qwen3_moe_fused.lora import patch_lora_config
@@ -43,6 +47,9 @@ def main():
 
     model, tokenizer = FastModel.from_pretrained(model_dir, auto_model=Qwen3MoeFusedForCausalLM)
 
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
     model = FastModel.get_peft_model(
         model,
         target_modules=[
@@ -66,7 +73,16 @@ def main():
 
     # These hyperparameters are for exaggerating the training of the tiny model
     # Don't use them in actual training
-    sft_config = SFTConfig(
+    tokenized_dataset = dataset.map(
+        lambda examples: tokenizer(examples["text"], truncation=True, max_length=256),
+        batched=True,
+        remove_columns=dataset.column_names,
+    )
+
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+
+    training_args = TrainingArguments(
+        output_dir="./outputs/tiny_unsloth",
         per_device_train_batch_size=2,
         gradient_accumulation_steps=1,
         learning_rate=1e-2,
@@ -76,16 +92,15 @@ def main():
         save_steps=3,
         bf16=True,
         optim="adamw_8bit",
-        dataset_text_field="text",
-        dataset_num_proc=1,
         report_to="none",
         seed=3407,
     )
-    trainer = SFTTrainer(
+    trainer = Trainer(
         model=model,
-        processing_class=tokenizer,
-        train_dataset=dataset,
-        args=sft_config,
+        args=training_args,
+        train_dataset=tokenized_dataset,
+        tokenizer=tokenizer,
+        data_collator=data_collator,
     )
 
     trainer_stats = trainer.train()

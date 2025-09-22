@@ -8,7 +8,11 @@ from unsloth import FastModel
 
 # Import unsloth before others
 from datasets import load_dataset
-from trl import SFTConfig, SFTTrainer
+from transformers import (
+    DataCollatorForLanguageModeling,
+    Trainer,
+    TrainingArguments,
+)
 
 from qwen3_moe_fused.fast_lora import patch_Qwen3MoeFusedSparseMoeBlock_forward
 from qwen3_moe_fused.lora import patch_lora_config
@@ -42,6 +46,9 @@ def main():
 
     model, tokenizer = FastModel.from_pretrained(model_id, auto_model=Qwen3MoeFusedForCausalLM)
 
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
     model = FastModel.get_peft_model(
         model,
         target_modules=[
@@ -62,8 +69,16 @@ def main():
     )
 
     dataset = load_dataset("stanfordnlp/imdb", split="train")
+    tokenized_dataset = dataset.map(
+        lambda examples: tokenizer(examples["text"], truncation=True, max_length=512),
+        batched=True,
+        remove_columns=dataset.column_names,
+    )
 
-    sft_config = SFTConfig(
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+
+    training_args = TrainingArguments(
+        output_dir="./outputs/moe_unsloth",
         per_device_train_batch_size=1,  # Increase batch size if you have more memory
         gradient_accumulation_steps=1,
         learning_rate=1e-4,
@@ -76,18 +91,17 @@ def main():
         save_total_limit=5,
         bf16=True,
         optim="adamw_8bit",
-        dataset_text_field="text",
-        dataset_num_proc=1,
         torch_compile=True,
         torch_compile_mode="max-autotune",
         report_to="none",  # You may report to Wandb
         seed=3407,
     )
-    trainer = SFTTrainer(
+    trainer = Trainer(
         model=model,
-        processing_class=tokenizer,
-        train_dataset=dataset,
-        args=sft_config,
+        args=training_args,
+        train_dataset=tokenized_dataset,
+        tokenizer=tokenizer,
+        data_collator=data_collator,
     )
 
     trainer_stats = trainer.train()
