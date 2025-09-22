@@ -7,8 +7,12 @@ import os
 
 from datasets import Dataset
 from peft import LoraConfig, get_peft_model
-from transformers import AutoTokenizer
-from trl import SFTConfig, SFTTrainer
+from transformers import (
+    AutoTokenizer,
+    DataCollatorForLanguageModeling,
+    Trainer,
+    TrainingArguments,
+)
 
 from qwen3_moe_fused.fast_lora import patch_Qwen3MoeFusedSparseMoeBlock_forward
 from qwen3_moe_fused.lora import patch_lora_config
@@ -28,6 +32,8 @@ def main():
 
     model = Qwen3MoeFusedForCausalLM.from_pretrained(model_dir)
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
 
     lora_config = LoraConfig(
         target_modules=[
@@ -61,7 +67,16 @@ def main():
 
     # These hyperparameters are for exaggerating the training of the tiny model
     # Don't use them in actual training
-    sft_config = SFTConfig(
+    tokenized_dataset = dataset.map(
+        lambda examples: tokenizer(examples["text"], truncation=True, max_length=256),
+        batched=True,
+        remove_columns=dataset.column_names,
+    )
+
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+
+    training_args = TrainingArguments(
+        output_dir="./outputs/tiny",
         per_device_train_batch_size=2,
         gradient_accumulation_steps=1,
         learning_rate=1e-2,
@@ -71,15 +86,14 @@ def main():
         save_steps=3,
         bf16=True,
         optim="adamw_8bit",
-        dataset_text_field="text",
-        dataset_num_proc=1,
         report_to="none",
     )
-    trainer = SFTTrainer(
+    trainer = Trainer(
         model=model,
-        processing_class=tokenizer,
-        train_dataset=dataset,
-        args=sft_config,
+        args=training_args,
+        train_dataset=tokenized_dataset,
+        tokenizer=tokenizer,
+        data_collator=data_collator,
     )
 
     trainer_stats = trainer.train()

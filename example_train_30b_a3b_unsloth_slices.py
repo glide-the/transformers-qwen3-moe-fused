@@ -4,61 +4,22 @@
 from __future__ import annotations
 
 import os
-from typing import Optional, Union, Any
 
-from torch import nn
-import torch
-from datasets import load_from_disk
-from datasets import load_dataset
-from torch.utils.data import WeightedRandomSampler
-from trl import SFTTrainer, SFTConfig
-from transformers import BitsAndBytesConfig
-
-from transformers import AutoTokenizer
-from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedForCausalLM
+from datasets import concatenate_datasets, load_dataset, load_from_disk
+from transformers import AutoTokenizer, BitsAndBytesConfig, TrainingArguments
 
 from unsloth import FastModel
 
 from collators import SliceCollator
 from curriculum import CurriculumCallback, CurriculumSampler
 from data_utils import format_example, slice_by_metadata
-from losses import compute_loss as compute_loss_fn
 from qwen3_moe_fused.fast_lora import patch_Qwen3MoeFusedSparseMoeBlock_forward
 from qwen3_moe_fused.lora import patch_lora_config
 from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
+from slice_trainer import SliceTrainer
 
 
 os.environ.setdefault("TRITON_PRINT_AUTOTUNING", "0")
-
-
-class SliceSFTTrainer(SFTTrainer):
-    """SFTTrainer variant that injects curriculum-aware sampling."""
-
-    def __init__(self, *args, curriculum_sampler: Optional[CurriculumSampler] = None, **kwargs):
-        self.curriculum_sampler = curriculum_sampler
-        super().__init__(*args, **kwargs)
-
-    def _get_train_sampler(self, train_dataset=None):
-        if self.curriculum_sampler is None:
-            return super()._get_train_sampler(train_dataset)
-
-        dataset = train_dataset if train_dataset is not None else self.train_dataset
-        if dataset is None:
-            return None
-
-        weights = self.curriculum_sampler.get_weights()
-        if weights.numel() == 0:
-            return super()._get_train_sampler(train_dataset)
-
-        return WeightedRandomSampler(weights, num_samples=len(weights), replacement=True)
-
-    def compute_loss(self,
-        model: nn.Module,
-        inputs: dict[str, Union[torch.Tensor, Any]],
-        return_outputs: bool = False,
-        num_items_in_batch: Optional[torch.Tensor] = None
-    ):
-        return compute_loss_fn(model, inputs, return_outputs)
 
 
 def main() -> None:
@@ -68,8 +29,13 @@ def main() -> None:
     patch_Qwen3MoeFusedSparseMoeBlock_forward()
 
     # === Step 2. 数据准备 ===
-    imdb = load_from_disk("/media/gpt4-pdf-chatbot-langchain/transformers-qwen3-moe-fused/dataset/imdb_train")
-    agent = load_dataset("json", data_files="/media/gpt4-pdf-chatbot-langchain/transformers-qwen3-moe-fused/dataset/agent/gemini_q_glm_a_finetuning_events_1152q_1710191088.258371.json")
+    imdb = load_from_disk(
+        "/media/gpt4-pdf-chatbot-langchain/transformers-qwen3-moe-fused/dataset/imdb_train"
+    )
+    agent = load_dataset(
+        "json",
+        data_files="/media/gpt4-pdf-chatbot-langchain/transformers-qwen3-moe-fused/dataset/agent/gemini_q_glm_a_finetuning_events_1152q_1710191088.258371.json",
+    )
 
     imdb = imdb.map(slice_by_metadata)
     agent = agent.map(slice_by_metadata)
@@ -79,11 +45,9 @@ def main() -> None:
 
     columns_to_keep = {"text", "slice"}
     imdb = imdb.remove_columns([col for col in imdb.column_names if col not in columns_to_keep])
-    agent = agent.remove_columns([col for col in agent['train'].column_names if col not in columns_to_keep])
+    agent = agent.remove_columns([col for col in agent["train"].column_names if col not in columns_to_keep])
 
-    from datasets import concatenate_datasets
-    train_dataset = concatenate_datasets([agent['train'], imdb])
-    # eval_dataset = imdb.get("test")
+    train_dataset = concatenate_datasets([agent["train"], imdb])
 
     model_id = "/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507-fused-bnb-4bit"
 
@@ -93,9 +57,9 @@ def main() -> None:
         bnb_4bit_use_double_quant=True,
         bnb_4bit_compute_dtype="bfloat16",  # 或 torch.float16
     )
- 
+
     model, tokenizer = FastModel.from_pretrained(
-        model_id, 
+        model_id,
         auto_model=Qwen3MoeFusedForCausalLM,
         quantization_config=quant_config,
         trust_remote_code=True,
@@ -105,16 +69,7 @@ def main() -> None:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    # train_dataset = train_dataset.map(lambda example: {"text": example["prompt"] + example["target"]})
-    # text_columns = {"text", "slice"}
-    # train_dataset = train_dataset.remove_columns([
-    #     col for col in train_dataset.column_names if col not in text_columns
-    # ]) 
-    # tokenized_eval = None
-
-    collator = SliceCollator(tokenizer, max_seq_len=256, micro_batch_size=4)
-    def data_collator(features):
-        return collator(features)
+    data_collator = SliceCollator(tokenizer, max_seq_len=256, micro_batch_size=4)
 
     phases = [
         (1000, {"classification": 0.5, "agent": 0.5}),
@@ -124,9 +79,7 @@ def main() -> None:
     curriculum_sampler = CurriculumSampler(train_dataset, phases)
     curriculum_callback = CurriculumCallback(curriculum_sampler)
 
-    try: 
-
-
+    try:
         model = FastModel.get_peft_model(
             model,
             target_modules=[
@@ -144,9 +97,9 @@ def main() -> None:
             use_rslora=True,
             use_gradient_checkpointing="unsloth",
             random_state=3407,
-        ) 
-        # === Step 4. Trainer ===
-        training_args = SFTConfig(
+        )
+
+        training_args = TrainingArguments(
             output_dir="./moe_unsloth",
             per_device_train_batch_size=1,  # Increase batch size if you have more memory
             gradient_accumulation_steps=1,
@@ -160,19 +113,17 @@ def main() -> None:
             save_total_limit=5,
             bf16=True,
             optim="adamw_8bit",
-            dataset_text_field="text",
-            dataset_num_proc=1,
             torch_compile=True,
             torch_compile_mode="max-autotune",
             report_to="none",  # You may report to Wandb
             seed=3407,
         )
 
-        trainer = SliceSFTTrainer(
+        trainer = SliceTrainer(
             model=model,
-            processing_class=tokenizer,
-            train_dataset=train_dataset,
             args=training_args,
+            train_dataset=train_dataset,
+            tokenizer=tokenizer,
             data_collator=data_collator,
             callbacks=[curriculum_callback],
             curriculum_sampler=curriculum_sampler,
@@ -180,8 +131,10 @@ def main() -> None:
         trainer.train()
     except Exception as e:
         import traceback
+
         print("❌ 训练过程中发生异常：", str(e))
         traceback.print_exc()
+
 
 if __name__ == "__main__":
     main()

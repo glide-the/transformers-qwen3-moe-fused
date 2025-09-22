@@ -4,48 +4,22 @@
 from __future__ import annotations
 
 import os
-from typing import Optional
-
 import torch
 from datasets import Dataset, DatasetDict
 from peft import LoraConfig, get_peft_model
-from torch.utils.data import WeightedRandomSampler
-from transformers import AutoTokenizer
-from trl import SFTConfig, SFTTrainer
+from transformers import AutoTokenizer, TrainingArguments
 
 from collators import SliceCollator
 from curriculum import CurriculumCallback, CurriculumSampler
 from data_utils import slice_by_metadata
-from losses import compute_loss
 from qwen3_moe_fused.fast_lora import patch_Qwen3MoeFusedSparseMoeBlock_forward
 from qwen3_moe_fused.lora import patch_lora_config
 from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedForCausalLM
 from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
+from slice_trainer import SliceTrainer
 
 
 os.environ.setdefault("TRITON_PRINT_AUTOTUNING", "1")
-
-
-class SliceSFTTrainer(SFTTrainer):
-    """SFTTrainer variant that injects curriculum-aware sampling."""
-
-    def __init__(self, *args, curriculum_sampler: Optional[CurriculumSampler] = None, **kwargs):
-        self.curriculum_sampler = curriculum_sampler
-        super().__init__(*args, **kwargs)
-
-    def _get_train_sampler(self, train_dataset=None):
-        if self.curriculum_sampler is None:
-            return super()._get_train_sampler(train_dataset)
-
-        dataset = train_dataset if train_dataset is not None else self.train_dataset
-        if dataset is None :
-            return None
-
-        weights = self.curriculum_sampler.get_weights()
-        if weights.numel() == 0:
-            return super()._get_train_sampler(train_dataset)
-
-        return WeightedRandomSampler(weights, num_samples=len(weights), replacement=True)
 
 
 def build_tiny_dataset() -> DatasetDict:
@@ -120,7 +94,10 @@ def main():
     curriculum_sampler = CurriculumSampler(dataset["train"], phases)
     curriculum_callback = CurriculumCallback(curriculum_sampler)
 
-    sft_config = SFTConfig(
+    data_collator = SliceCollator(tokenizer, max_seq_len=256, micro_batch_size=2)
+
+    training_args = TrainingArguments(
+        output_dir="./outputs/tiny_with_slices",
         per_device_train_batch_size=2,
         gradient_accumulation_steps=1,
         learning_rate=5e-3,
@@ -130,18 +107,16 @@ def main():
         save_steps=5,
         bf16=torch.cuda.is_available(),
         optim="adamw_torch",
-        dataset_text_field="text",
-        dataset_num_proc=1,
         report_to="none",
     )
 
-    trainer = SliceSFTTrainer(
+    trainer = SliceTrainer(
         model=model,
-        processing_class=tokenizer,
+        args=training_args,
         train_dataset=dataset["train"],
         eval_dataset=dataset["validation"],
-        args=sft_config,
-        compute_loss_func=compute_loss,
+        tokenizer=tokenizer,
+        data_collator=data_collator,
         callbacks=[curriculum_callback],
         curriculum_sampler=curriculum_sampler,
     )
