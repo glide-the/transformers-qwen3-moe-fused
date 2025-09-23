@@ -215,3 +215,5 @@ __marimo__/
 /unsloth_compiled_cache/
 /unsloth_training_checkpoints/
 dataset/imdb_train/cache*
+moe_unsloth
+wandb

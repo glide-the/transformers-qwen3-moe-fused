@@ -22,6 +22,16 @@
         ]
       },
       {
+        "name": "Infer unsloth 30B Model",
+        "type": "python",
+        "request": "launch",
+        "program": "${workspaceFolder}/test_infer.py",
+        "console": "integratedTerminal",
+        "justMyCode": false,
+        "args": [
+        ]
+      },
+      {
         "name": "Convert 30B Model",
         "type": "python",
         "request": "launch",

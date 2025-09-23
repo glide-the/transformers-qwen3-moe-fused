@@ -42,7 +42,7 @@ def main() -> None:
     agent = agent.map(slice_by_metadata)
 
     imdb = imdb.map(format_example)
-    agent = agent.map(format_example)
+    agent = agent.map(format_example, load_from_cache_file=False)
 
     columns_to_keep = {"text", "slice"}
     imdb = imdb.remove_columns([col for col in imdb.column_names if col not in columns_to_keep])
@@ -115,7 +115,8 @@ def main() -> None:
             optim="adamw_8bit",
             torch_compile=True,
             torch_compile_mode="max-autotune",
-            report_to="none",  # You may report to Wandb
+            report_to="wandb",   # 打开 Wandb 支持
+            run_name="moe_unsloth_run",  # 可选，指定在 Wandb 上的运行名
             seed=3407,
 
             remove_unused_columns=False,
@@ -130,7 +131,9 @@ def main() -> None:
             callbacks=[curriculum_callback],
             curriculum_sampler=curriculum_sampler,
         )
-        trainer.train()
+        trainer.train(resume_from_checkpoint=True)
+        model.save_pretrained("/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507-train")  # Local saving
+        tokenizer.save_pretrained("/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507-train")
     except Exception as e:
         import traceback
 
