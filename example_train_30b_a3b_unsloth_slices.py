@@ -22,6 +22,8 @@ from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedForCausalLM
 
 os.environ.setdefault("TRITON_PRINT_AUTOTUNING", "0")
 
+os.environ["WANDB_PROJECT"] = "Qwen3-30B-A3B-Instruct-2507"
+os.environ["WANDB_LOG_MODEL"] = "moe_unsloth_checkpoint"
 
 def main() -> None:
     # === Step 1. 打补丁 ===
