@@ -30,7 +30,7 @@ os.environ["WANDB_LOG_MODEL"] = "moe_unsloth_standardize_sharegpt_checkpoint"
 def main() -> None:
     # === Step 1. 打补丁 ===
     patch_bnb_quantizer()
-    # patch_lora_config()
+    patch_lora_config()
     patch_Qwen3MoeFusedSparseMoeBlock_forward()
 
     # === Step 2. 数据准备 ===
