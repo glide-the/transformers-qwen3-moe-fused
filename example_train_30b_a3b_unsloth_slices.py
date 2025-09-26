@@ -56,17 +56,17 @@ def main() -> None:
 
     model_id = "/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507-fused-bnb-4bit"
 
-    # quant_config = BitsAndBytesConfig(
-    #     load_in_4bit=True,
-    #     bnb_4bit_quant_type="nf4",
-    #     bnb_4bit_use_double_quant=True,
-    #     bnb_4bit_compute_dtype="bfloat16",  # 或 torch.float16
-    # )
+    quant_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_compute_dtype="bfloat16",  # 或 torch.float16
+    )
 
     model, tokenizer = FastModel.from_pretrained(
         model_id,
         auto_model=Qwen3MoeFusedForCausalLM,
-        # quantization_config=quant_config,
+        quantization_config=quant_config,
         trust_remote_code=True,
     ) 
 
@@ -127,8 +127,8 @@ def main() -> None:
                 "o_proj",
                 # "gate",
                 "gate_proj",
-                # "up_proj",
-                # "down_proj",
+                "up_proj",
+                "down_proj",
             ],
             r=8,
             lora_alpha=16,
