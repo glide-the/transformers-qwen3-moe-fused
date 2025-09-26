@@ -9,7 +9,7 @@ from torch.utils.data import WeightedRandomSampler
 from transformers import Trainer
 
 from curriculum import CurriculumSampler
-
+import trl
 
 class SliceTrainer(Trainer):
     """Trainer that integrates curriculum-aware sampling and custom loss."""

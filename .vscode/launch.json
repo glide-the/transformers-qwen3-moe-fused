@@ -9,7 +9,11 @@
         "console": "integratedTerminal",
         "justMyCode": false,
         "args": [
-        ]
+        ],
+        "env": {
+          "http_proxy": "http://127.0.0.1:7890",
+          "https_proxy": "http://127.0.0.1:7890",
+        }
       },
       {
         "name": "Train Transfrom 30B Model",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Dict, List
+from unsloth.chat_templates import standardize_sharegpt
 
 
 def slice_by_metadata(example: Dict) -> Dict:
@@ -17,42 +18,71 @@ def slice_by_metadata(example: Dict) -> Dict:
     return example
 
 
+
 def format_example(example: Dict) -> Dict:
-    """Normalise heterogeneous samples into prompt/target pairs."""
+    """Normalise heterogeneous samples into standardize_sharegpt format."""
 
-    if example.get("slice") == "classification":
-        text = example["text"]
-        label = str(example["label"])
-        text = f"分类任务: 请判断以下评论的情感。\n\n评论: {text}\n\n答案: {label}".format(text=text, label=label)
-       
-    elif example.get("slice") == "agent":
-        messages = example.get("messages", [])
-        conv = ""
-        for message in messages[:-1]:
-            role = "用户" if message.get("role") == "user" else "助手"
-            content = message.get("content", "")
-            conv += f"{role}: {content}\n" if content else f"{role}: \n"
-        system = example.get("system", "")
-        text = f"{system}\n{conv}" if system else conv
-    
+    slice_type = example.get("slice")
+    conversations: List[Dict] = []
+
+    if slice_type == "classification":
+        text = example.get("text", "")
+        label = str(example.get("label", ""))
+        # 转换成 ShareGPT 标准格式
+        conversations = [
+            {"from": "system", "value": "分类任务: 请判断以下评论的情感。"},
+            {"from": "user",   "value": f"评论: {text}"},
+            {"from": "assistant", "value": f"答案: {label}"}
+        ]
+
+    elif slice_type == "agent":
+        # agent 类型一般已经有 messages
+        # 这里把 role/role-name 转换成 ShareGPT 格式
+        raw_messages = example.get("messages", [])
+        system_msg = example.get("system", "")
+
+        if system_msg:
+            conversations.append({"from": "system", "value": system_msg})
+
+        for m in raw_messages:
+            role = m.get("role")
+            content = m.get("content", "")
+            if role in ["user", "assistant", "system"]:
+                conversations.append({"from": role, "value": content})
+            else:
+                # 默认 fallback 为 user
+                conversations.append({"from": "user", "value": content})
+
     else:
-        prompt = example.get("text", "")
-        target = ""
+        # fallback 情况
+        text = example.get("text", "")
+        conversations = [
+            {"from": "user", "value": text}
+        ]
 
-    return {"text": text, "slice": example.get("slice")}
+    return {"conversations": conversations, "slice": slice_type}
 
 
-def tokenize_fn(examples: Dict[str, List[str]], tokenizer, max_length: int = 512):
-    """Tokenize prompt/target pairs for supervised fine-tuning."""
+from datasets import Dataset
 
-    prompts: List[str] = examples["prompt"]
-    targets: List[str] = examples["target"]
-    texts = [prompt + target for prompt, target in zip(prompts, targets)]
-    encodings = tokenizer(
-        texts,
-        truncation=True,
-        padding="max_length",
-        max_length=max_length,
-    )
-    encodings["labels"] = encodings["input_ids"].copy()
-    return encodings
+def inspect_dataset(ds: Dataset, n: int = 5):
+    """打印 HuggingFace Dataset 的状态面板"""
+    print("="*60)
+    print("📊 Dataset Info Panel")
+    print("="*60)
+    print(f"🔹 Num rows : {len(ds)}")
+    print(f"🔹 Columns  : {ds.column_names}")
+    print(f"🔹 Features : {ds.features}")
+    print("="*60)
+    print(f"🔹 Preview (前 {n} 条)")
+    print("="*60)
+    
+    for i, ex in enumerate(ds.select(range(min(n, len(ds))))):
+        print(f"Row {i}:")
+        for col in ds.column_names:
+            val = ex[col]
+            # 截断太长的文本，避免刷屏
+            if isinstance(val, str) and len(val) > 100:
+                val = val[:100] + "..."
+            print(f"  - {col}: {val}")
+        print("-"*60)

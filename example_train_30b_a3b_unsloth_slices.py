@@ -9,26 +9,28 @@ from datasets import concatenate_datasets, load_dataset, load_from_disk
 from transformers import AutoTokenizer, BitsAndBytesConfig, TrainingArguments
 
 from unsloth import FastModel
-
+import pandas as pd
+from datasets import Dataset
 from collators import SliceCollator
 from curriculum import CurriculumCallback, CurriculumSampler
-from data_utils import format_example, slice_by_metadata
+from data_utils import format_example, slice_by_metadata, inspect_dataset
 from qwen3_moe_fused.fast_lora import patch_Qwen3MoeFusedSparseMoeBlock_forward
 from qwen3_moe_fused.lora import patch_lora_config
 from qwen3_moe_fused.quantize.quantizer import patch_bnb_quantizer
 from slice_trainer import SliceTrainer
 from qwen3_moe_fused.modular_qwen3_moe_fused import Qwen3MoeFusedForCausalLM
 
+from unsloth.chat_templates import standardize_sharegpt
 
 os.environ.setdefault("TRITON_PRINT_AUTOTUNING", "0")
 
 os.environ["WANDB_PROJECT"] = "Qwen3-30B-A3B-Instruct-2507"
-os.environ["WANDB_LOG_MODEL"] = "moe_unsloth_checkpoint"
+os.environ["WANDB_LOG_MODEL"] = "moe_unsloth_standardize_sharegpt_checkpoint"
 
 def main() -> None:
     # === Step 1. 打补丁 ===
     patch_bnb_quantizer()
-    patch_lora_config()
+    # patch_lora_config()
     patch_Qwen3MoeFusedSparseMoeBlock_forward()
 
     # === Step 2. 数据准备 ===
@@ -43,33 +45,67 @@ def main() -> None:
     imdb = imdb.map(slice_by_metadata)
     agent = agent.map(slice_by_metadata)
 
-    imdb = imdb.map(format_example)
+    imdb = imdb.map(format_example, load_from_cache_file=False)
     agent = agent.map(format_example, load_from_cache_file=False)
 
-    columns_to_keep = {"text", "slice"}
+    columns_to_keep = {"conversations", "slice"}
     imdb = imdb.remove_columns([col for col in imdb.column_names if col not in columns_to_keep])
     agent = agent.remove_columns([col for col in agent["train"].column_names if col not in columns_to_keep])
 
-    train_dataset = concatenate_datasets([agent["train"], imdb])
+
 
     model_id = "/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507-fused-bnb-4bit"
 
-    quant_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_compute_dtype="bfloat16",  # 或 torch.float16
-    )
+    # quant_config = BitsAndBytesConfig(
+    #     load_in_4bit=True,
+    #     bnb_4bit_quant_type="nf4",
+    #     bnb_4bit_use_double_quant=True,
+    #     bnb_4bit_compute_dtype="bfloat16",  # 或 torch.float16
+    # )
 
     model, tokenizer = FastModel.from_pretrained(
         model_id,
         auto_model=Qwen3MoeFusedForCausalLM,
-        quantization_config=quant_config,
+        # quantization_config=quant_config,
         trust_remote_code=True,
     ) 
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+
+
+    imdb_standardize = standardize_sharegpt(imdb)
+    imdb_conversations = tokenizer.apply_chat_template(
+        imdb_standardize["conversations"],
+        tokenize = False,
+    )
+
+    df_imdb = pd.DataFrame({
+        "text": imdb_conversations,
+        "slice": imdb_standardize["slice"]  # 保留 slice
+    })
+
+
+    agent_standardize = standardize_sharegpt(agent["train"])
+    agent_conversations = tokenizer.apply_chat_template(
+        agent_standardize["conversations"],
+        tokenize = False,
+    )
+
+    df_agent = pd.DataFrame({
+        "text": agent_conversations,
+        "slice": agent_standardize["slice"]  # 保留 slice
+    })
+
+    # --- 3. 合并 ---
+    data = pd.concat([df_imdb, df_agent], ignore_index=True)
+
+    # 转为 HuggingFace Dataset
+    combined_dataset = Dataset.from_pandas(data)
+
+    # 打乱
+    train_dataset = combined_dataset.shuffle(seed=3407)
+    inspect_dataset(train_dataset, n=3)
 
     data_collator = SliceCollator(tokenizer, max_seq_len=256, micro_batch_size=4)
 
@@ -91,21 +127,21 @@ def main() -> None:
                 "o_proj",
                 # "gate",
                 "gate_proj",
-                "up_proj",
-                "down_proj",
+                # "up_proj",
+                # "down_proj",
             ],
-            r=4,
-            lora_alpha=1,
-            use_rslora=True,
+            r=8,
+            lora_alpha=16,
+            lora_dropout=0.05,
+            bias="none",
             use_gradient_checkpointing="unsloth",
-            random_state=3407,
         )
 
         training_args = TrainingArguments(
             output_dir="./moe_unsloth",
             per_device_train_batch_size=1,  # Increase batch size if you have more memory
             gradient_accumulation_steps=1,
-            learning_rate=1e-4,
+            learning_rate=5e-4,
             weight_decay=1e-3,  # For MoE models, weight decay can be smaller than dense models
             num_train_epochs=1,
             lr_scheduler_type="linear",
@@ -118,7 +154,7 @@ def main() -> None:
             torch_compile=True,
             torch_compile_mode="max-autotune",
             report_to="wandb",   # 打开 Wandb 支持
-            run_name="moe_unsloth_run",  # 可选，指定在 Wandb 上的运行名
+            run_name="moe_unsloth_standardize_sharegpt_run",  # 可选，指定在 Wandb 上的运行名
             seed=3407,
 
             remove_unused_columns=False,
@@ -133,9 +169,12 @@ def main() -> None:
             callbacks=[curriculum_callback],
             curriculum_sampler=curriculum_sampler,
         )
-        trainer.train(resume_from_checkpoint=True)
-        model.save_pretrained("/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507-train")  # Local saving
-        tokenizer.save_pretrained("/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507-train")
+        # trainer.train(resume_from_checkpoint=True)
+        trainer.train()
+        # model.save_pretrained("/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507-train-lora")  # Local saving
+        # tokenizer.save_pretrained("/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507-train-lora")
+
+        model.save_pretrained_merged("/media/checkpoint1/Qwen3-30B-A3B-Instruct-2507-train-4bit", tokenizer)
     except Exception as e:
         import traceback
 
